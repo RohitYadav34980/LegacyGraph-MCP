@@ -1,0 +1,34 @@
+[tool.poetry]
+name = "legacy-mcp-analyzer"
+version = "0.1.0"
+description = "MCP Server for analyzing C++ legacy codebases"
+authors = ["Antigravity <antigravity@example.com>"]
+readme = "README.md"
+packages = [{include = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+mcp = "^1.0.0"
+tree-sitter = "^0.23.0"
+tree-sitter-cpp = "^0.23.0"
+networkx = "^3.2.1"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0.0"
+pytest-cov = "^4.1.0"
+mypy = "^1.8.0"
+black = "^24.1.0"
+ruff = "^0.1.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.mypy]
+strict = true
+ignore_missing_imports = true
+pretty = true
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"

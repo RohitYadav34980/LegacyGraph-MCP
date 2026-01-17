@@ -1,0 +1,17 @@
+Error processing line 7 of C:\Users\yadav\OneDrive\Desktop\LegacyX_MCP\venv\Lib\site-packages\pywin32.pth:
+
+  Traceback (most recent call last):
+    File "<frozen site>", line 207, in addpackage
+    File "<string>", line 1, in <module>
+  ModuleNotFoundError: No module named 'pywin32_bootstrap'
+
+Remainder of file ignored
+Error processing line 7 of C:\Users\yadav\OneDrive\Desktop\LegacyX_MCP\venv\Lib\site-packages\pywin32.pth:
+
+  Traceback (most recent call last):
+    File "<frozen site>", line 207, in addpackage
+    File "<string>", line 1, in <module>
+  ModuleNotFoundError: No module named 'pywin32_bootstrap'
+
+Remainder of file ignored
+C:\Users\yadav\OneDrive\Desktop\LegacyX_MCP\venv\Scripts\python.exe: No module named pytest.__main__; 'pytest' is a package and cannot be directly executed
