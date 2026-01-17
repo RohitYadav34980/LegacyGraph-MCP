@@ -17,8 +17,8 @@ LegacyGraph-MCP is a tool designed to bridge the gap between AI Agents and legac
 
 ### Installation
 ```bash
-git clone https://github.com/RohitYadav34980/McKinsey-LegacyX-MCP.git
-cd McKinsey-LegacyX-MCP
+git clone https://github.com/RohitYadav34980/LegacyGraph-MCP.git
+cd LegacyGraph-MCP
 poetry install
 ```
 
