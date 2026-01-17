@@ -21,7 +21,7 @@ except ImportError:
             logger.error("Cannot start server: FastMCP dependency missing. Please `pip install fastmcp`.")
 
 # Initialize Server
-mcp = FastMCP("McKinsey-LegacyX-MCP")
+mcp = FastMCP("LegacyGraph-MCP")
 
 # Global State
 # In a real persistent server, this might be a database or re-parsed per request.

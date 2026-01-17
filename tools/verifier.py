@@ -10,7 +10,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from src.server import analyze_codebase, get_callers, get_callees, detect_cycles, get_orphan_functions
 
 def run_verification():
-    print("=== Starting McKinsey LegacyX MCP Verification ===")
+    print("=== Starting LegacyGraph-MCP Verification ===")
     
     # 1. Load Data
     data_dir = os.path.join(os.path.dirname(__file__), "..", "data", "legacy_project")

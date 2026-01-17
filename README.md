@@ -1,58 +1,42 @@
-# McKinsey LegacyX MCP Server
+# LegacyGraph-MCP: Agentic C++ Modernization 🏗️
 
-McKinsey LegacyX MCP is a Model Context Protocol (MCP) Server designed to help AI agents understand and analyze legacy C++ codebases. It parses C++ code into a dependency graph and provides tools to query the code structure, enabling questions like "What functions call `calculate_risk()`?" or "Detect circular dependencies."
+[![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/)
+[![MCP Protocol](https://img.shields.io/badge/MCP-Enabled-green.svg)](https://modelcontextprotocol.io/)
+[![Code Style: Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-## Features
+## ⚡ The Problem
+Legacy modernization using standard LLMs fails because:
+1.  **Lost Context:** "Spaghetti code" (intertwined dependencies) cannot fit in a context window.
+2.  **Hallucinations:** Agents refactor functions without knowing upstream dependencies, causing breakage.
+3.  **Text vs. Logic:** Regex-based parsers miss nuances in C++ macros and templates.
 
-- **Robust Parsing:** Uses `tree-sitter` for fault-tolerant parsing of C++ code, handling syntax errors gracefully.
-- **Dependency Analysis:** Builds a directed graph of function calls using `networkx`.
-- **Cycle Detection:** Identifies circular dependencies in the codebase.
-- **MCP Interface:** Exposes analysis tools via the Model Context Protocol.
-- **Type Safe:** Fully typed Python codebase passing `mypy --strict`.
+## 🛠️ The Solution
+**LegacyGraph-MCP** is a Model Context Protocol (MCP) server that exposes a C++ codebase as a **Knowledge Graph** to AI Agents.
 
-## Installation
+Instead of reading text, the Agent queries the structure:
+> *"Agent: Which functions call `calculate_risk()`?"*
+> *"MCP: `process_loan()` and `assess_credit()`"*
 
-This project uses [Poetry](https://python-poetry.org/) for dependency management.
+### Features
+* **AST Parsing:** Uses `tree-sitter` for 100% accurate C++ parsing (no Regex).
+* **Graph RAG:** Detects **Circular Dependencies** ($A \to B \to A$) before refactoring begins.
+* **Universal Compatibility:** Works with Claude Desktop, DeepSeek-Coder, and any MCP client.
 
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/RohitYadav34980/McKinsey-LegacyX-MCP.git
-    cd McKinsey-LegacyX-MCP
-    ```
+## 🚀 Quick Start
 
-2.  **Install dependencies:**
-    ```bash
-    poetry install
-    ```
+### 1. Install
+```bash
+git clone https://github.com/RohitYadav34980/LegacyGraph-MCP.git
+cd LegacyGraph-MCP
+poetry install
+```
 
-## Usage
-
-### Running the MCP Server
-
-To run the MCP server:
-
+### 2. Run Server
 ```bash
 poetry run python -m src.server
 ```
 
-### Running Tests
-
-To run the comprehensive test suite:
-
+### 3. Verify
 ```bash
-poetry run pytest tests/
+poetry run python tools/verifier.py
 ```
-
-## Architecture
-
-The project is structured into three main layers:
-
-1.  **Ingestion Layer (`src/parser.py`)**: Responsible for parsing C++ source code and extracting function definitions and calls using `tree-sitter`.
-2.  **Graph Layer (`src/graph.py`)**: Manages the dependency graph, providing methods for topological sorting, cycle detection, and querying upstream/downstream dependencies.
-3.  **Interface Layer (`src/server.py`)**: The MCP server implementation that exposes the graph analysis capabilities as tools to AI agents.
-
-## Development
-
-- **Linting:** `poetry run ruff check .`
-- **Formatting:** `poetry run black .`
-- **Type Checking:** `poetry run mypy .`

@@ -1,7 +1,7 @@
-# McKinsey LegacyX MCP Project Manual
+# LegacyGraph-MCP Project Manual
 
 ## 1. Project Overview
-McKinsey LegacyX MCP is a tool designed to bridge the gap between AI Agents and legacy C++ codebases. By exposing a code dependency graph via the Model Context Protocol (MCP), it allows LLMs to "reason" about code structure rather than just reading text.
+LegacyGraph-MCP is a tool designed to bridge the gap between AI Agents and legacy C++ codebases. By exposing a code dependency graph via the Model Context Protocol (MCP), it allows LLMs to "reason" about code structure rather than just reading text.
 
 ### Key Capabilities
 - **Robust Parsing:** Handles dirty/broken C++ code using `tree-sitter`.
