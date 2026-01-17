@@ -1,7 +1,7 @@
 # McKinsey LegacyX MCP Project Manual
 
 ## 1. Project Overview
-Legacy-MCP-Analyzer is a tool designed to bridge the gap between AI Agents and legacy C++ codebases. By exposing a code dependency graph via the Model Context Protocol (MCP), it allows LLMs to "reason" about code structure rather than just reading text.
+McKinsey LegacyX MCP is a tool designed to bridge the gap between AI Agents and legacy C++ codebases. By exposing a code dependency graph via the Model Context Protocol (MCP), it allows LLMs to "reason" about code structure rather than just reading text.
 
 ### Key Capabilities
 - **Robust Parsing:** Handles dirty/broken C++ code using `tree-sitter`.
@@ -17,8 +17,8 @@ Legacy-MCP-Analyzer is a tool designed to bridge the gap between AI Agents and l
 
 ### Installation
 ```bash
-git clone https://github.com/your-org/legacy-mcp-analyzer.git
-cd legacy-mcp-analyzer
+git clone https://github.com/RohitYadav34980/McKinsey-LegacyX-MCP.git
+cd McKinsey-LegacyX-MCP
 poetry install
 ```
 
@@ -95,3 +95,13 @@ graph TD
 The project includes a substantial test suite using `pytest`.
 - **Run Tests:** `poetry run pytest`
 - **Coverage:** Includes edge cases for recursion, orphans, and broken syntax.
+
+## 6. Development & Contributing
+### Standards
+- **Code Style:** Strict `mypy` typing and Google-style docstrings are enforced.
+- **Testing:** New features must include `pytest` cases covering edge scenarios.
+- **Version Control:**
+    - `main`: Stable, production-ready code.
+    - Feature branches: `feature/your-feature-name`.
+### Commit Protocol
+Follow conventional commits (e.g., `feat: add new cycle algorithm`, `fix: resolve parser timeout`).

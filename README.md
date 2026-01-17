@@ -1,6 +1,6 @@
 # McKinsey LegacyX MCP Server
 
-Legacy-MCP-Analyzer is a Model Context Protocol (MCP) Server designed to help AI agents understand and analyze legacy C++ codebases. It parses C++ code into a dependency graph and provides tools to query the code structure, enabling questions like "What functions call `calculate_risk()`?" or "Detect circular dependencies."
+McKinsey LegacyX MCP is a Model Context Protocol (MCP) Server designed to help AI agents understand and analyze legacy C++ codebases. It parses C++ code into a dependency graph and provides tools to query the code structure, enabling questions like "What functions call `calculate_risk()`?" or "Detect circular dependencies."
 
 ## Features
 
@@ -16,8 +16,8 @@ This project uses [Poetry](https://python-poetry.org/) for dependency management
 
 1.  **Clone the repository:**
     ```bash
-    git clone <repository_url>
-    cd Legacy-MCP-Analyzer
+    git clone https://github.com/RohitYadav34980/McKinsey-LegacyX-MCP.git
+    cd McKinsey-LegacyX-MCP
     ```
 
 2.  **Install dependencies:**
