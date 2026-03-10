@@ -39,6 +39,10 @@ mcp = FastMCP(
         "inspect callers/callees, detect cycles, and find orphan functions."
     ),
     website_url="https://github.com/RohitYadav34980/LegacyGraph-MCP",
+    # Configure HTTP binding for hosted environments (e.g., Render).
+    host="0.0.0.0",
+    port=int(os.environ.get("PORT", "8000")),
+    streamable_http_path="/mcp",
 )
 
 # Global State
@@ -136,6 +140,44 @@ def get_orphan_functions() -> str:
     except Exception as e:
         return f"Error finding orphans: {str(e)}"
 
+
+@mcp.custom_route("/.well-known/mcp/server-card.json", methods=["GET"])
+async def server_card(_: object) -> "JSONResponse":
+    from starlette.responses import JSONResponse
+
+    return JSONResponse(
+        {
+            "serverInfo": {
+                "name": "legacy-mcp-analyzer",
+                "version": "0.1.0",
+            },
+            "tools": [
+                {
+                    "name": "analyze_codebase",
+                    "description": "Analyze C++ source and build the internal dependency graph.",
+                },
+                {
+                    "name": "get_callers",
+                    "description": "List upstream functions that call the given function.",
+                },
+                {
+                    "name": "get_callees",
+                    "description": "List downstream functions that are called by the given function.",
+                },
+                {
+                    "name": "detect_cycles",
+                    "description": "Detect circular dependencies in the current call graph.",
+                },
+                {
+                    "name": "get_orphan_functions",
+                    "description": "Identify functions that are defined but never called by any other function.",
+                },
+            ],
+            "resources": [],
+            "prompts": [],
+        }
+    )
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="LegacyGraph-MCP server")
     parser.add_argument(
@@ -151,80 +193,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    # FastMCP's built-in `run()` binds to localhost by default, which won't be detected
-    # by platforms like Render. For deployments, we expose an ASGI app and let Uvicorn
-    # bind to 0.0.0.0:$PORT.
     if args.transport == "streamable-http":
-        from starlette.applications import Starlette
-        from starlette.middleware.cors import CORSMiddleware
-        from starlette.responses import JSONResponse, PlainTextResponse
-        from starlette.routing import Mount, Route
-        import uvicorn
-
-        subapp = mcp.streamable_http_app()
-
-        async def health(_: object) -> PlainTextResponse:
-            return PlainTextResponse("ok")
-
-        async def server_card(_: object) -> JSONResponse:
-            # Static server card so Smithery can skip active scanning.
-            return JSONResponse(
-                {
-                    "serverInfo": {
-                        "name": "legacy-mcp-analyzer",
-                        "version": "0.1.0",
-                    },
-                    "tools": [
-                        {
-                            "name": "analyze_codebase",
-                            "description": "Analyze C++ source and build the internal dependency graph.",
-                        },
-                        {
-                            "name": "get_callers",
-                            "description": "List upstream functions that call the given function.",
-                        },
-                        {
-                            "name": "get_callees",
-                            "description": "List downstream functions that are called by the given function.",
-                        },
-                        {
-                            "name": "detect_cycles",
-                            "description": "Detect circular dependencies in the current call graph.",
-                        },
-                        {
-                            "name": "get_orphan_functions",
-                            "description": "Identify functions that are defined but never called by any other function.",
-                        },
-                    ],
-                    "resources": [],
-                    "prompts": [],
-                }
-            )
-
-        # Mount the FastMCP Streamable HTTP app at the root; it already
-        # registers its own `/mcp` endpoint internally (via streamable_http_path).
-        app = Starlette(
-            routes=[
-                Route("/", endpoint=health, methods=["GET", "HEAD"]),
-                Route(
-                    "/.well-known/mcp/server-card.json",
-                    endpoint=server_card,
-                    methods=["GET"],
-                ),
-                Mount("/", app=subapp),
-            ]
-        )
-
-        # Allow cross-origin MCP calls (e.g., Smithery / browser-based clients).
-        app.add_middleware(
-            CORSMiddleware,
-            allow_origins=["*"],
-            allow_methods=["*"],
-            allow_headers=["*"],
-        )
-
-        port = int(os.environ.get("PORT", "8000"))
-        uvicorn.run(app, host="0.0.0.0", port=port)
+        mcp.run(transport="streamable-http")
     else:
-        # SSE transport can be mounted at a custom path directly.
         mcp.run(transport="sse", mount_path=args.path)
