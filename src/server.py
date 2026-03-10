@@ -201,6 +201,8 @@ if __name__ == "__main__":
                 }
             )
 
+        # Mount the FastMCP Streamable HTTP app at the root; it already
+        # registers its own `/mcp` endpoint internally (via streamable_http_path).
         app = Starlette(
             routes=[
                 Route("/", endpoint=health, methods=["GET", "HEAD"]),
@@ -209,7 +211,7 @@ if __name__ == "__main__":
                     endpoint=server_card,
                     methods=["GET"],
                 ),
-                Mount(args.path, app=subapp),
+                Mount("/", app=subapp),
             ]
         )
 
