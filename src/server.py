@@ -156,7 +156,8 @@ if __name__ == "__main__":
     # bind to 0.0.0.0:$PORT.
     if args.transport == "streamable-http":
         from starlette.applications import Starlette
-        from starlette.responses import PlainTextResponse
+        from starlette.middleware.cors import CORSMiddleware
+        from starlette.responses import JSONResponse, PlainTextResponse
         from starlette.routing import Mount, Route
         import uvicorn
 
@@ -165,16 +166,59 @@ if __name__ == "__main__":
         async def health(_: object) -> PlainTextResponse:
             return PlainTextResponse("ok")
 
-        async def mcp_info(_: object) -> PlainTextResponse:
-            # Lightweight probe endpoint so scanners (e.g., Smithery) don't get 405 on GET/HEAD.
-            return PlainTextResponse("LegacyGraph-MCP endpoint", status_code=200)
+        async def server_card(_: object) -> JSONResponse:
+            # Static server card so Smithery can skip active scanning.
+            return JSONResponse(
+                {
+                    "serverInfo": {
+                        "name": "legacy-mcp-analyzer",
+                        "version": "0.1.0",
+                    },
+                    "tools": [
+                        {
+                            "name": "analyze_codebase",
+                            "description": "Analyze C++ source and build the internal dependency graph.",
+                        },
+                        {
+                            "name": "get_callers",
+                            "description": "List upstream functions that call the given function.",
+                        },
+                        {
+                            "name": "get_callees",
+                            "description": "List downstream functions that are called by the given function.",
+                        },
+                        {
+                            "name": "detect_cycles",
+                            "description": "Detect circular dependencies in the current call graph.",
+                        },
+                        {
+                            "name": "get_orphan_functions",
+                            "description": "Identify functions that are defined but never called by any other function.",
+                        },
+                    ],
+                    "resources": [],
+                    "prompts": [],
+                }
+            )
 
         app = Starlette(
             routes=[
                 Route("/", endpoint=health, methods=["GET", "HEAD"]),
-                Route(args.path, endpoint=mcp_info, methods=["GET", "HEAD"]),
+                Route(
+                    "/.well-known/mcp/server-card.json",
+                    endpoint=server_card,
+                    methods=["GET"],
+                ),
                 Mount(args.path, app=subapp),
             ]
+        )
+
+        # Allow cross-origin MCP calls (e.g., Smithery / browser-based clients).
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_methods=["*"],
+            allow_headers=["*"],
         )
 
         port = int(os.environ.get("PORT", "8000"))
