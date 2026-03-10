@@ -30,8 +30,16 @@ except ImportError:
             )
 
 
-# Initialize Server
-mcp = FastMCP("LegacyGraph-MCP")
+# Initialize Server with rich metadata for MCP clients / Smithery
+mcp = FastMCP(
+    name="legacy-mcp-analyzer",
+    instructions=(
+        "LegacyGraph-MCP exposes a parsed C++ call graph over MCP. "
+        "Use it to analyze legacy C++ codebases: build a dependency graph, "
+        "inspect callers/callees, detect cycles, and find orphan functions."
+    ),
+    website_url="https://github.com/RohitYadav34980/LegacyGraph-MCP",
+)
 
 # Global State
 # In a real persistent server, this might be a database or re-parsed per request.
@@ -45,8 +53,9 @@ parser_service = CppParser()
 @mcp.tool()
 def analyze_codebase(code_content: str) -> str:
     """
-    Parses C++ code content and builds the dependency graph.
-    Call this first to populate the graph.
+    Analyze C++ source and build the internal dependency graph.
+
+    Call this first to populate the graph for subsequent queries.
 
     Args:
         code_content: The full C++ source code string.
@@ -73,7 +82,7 @@ def analyze_codebase(code_content: str) -> str:
 @mcp.tool()
 def get_callers(function_name: str) -> str:
     """
-    Returns a list of functions that call the specified function (upstream).
+    List upstream functions that call the given function.
     """
     try:
         callers = graph_service.get_upstream_callers(function_name)
@@ -87,7 +96,7 @@ def get_callers(function_name: str) -> str:
 @mcp.tool()
 def get_callees(function_name: str) -> str:
     """
-    Returns a list of functions called by the specified function (downstream).
+    List downstream functions that are called by the given function.
     """
     try:
         callees = graph_service.get_downstream_dependencies(function_name)
@@ -101,7 +110,7 @@ def get_callees(function_name: str) -> str:
 @mcp.tool()
 def detect_cycles() -> str:
     """
-    Detects circular dependencies in the codebase.
+    Detect circular dependencies in the current call graph.
     """
     try:
         cycles = graph_service.detect_cycles()
@@ -117,7 +126,7 @@ def detect_cycles() -> str:
 @mcp.tool()
 def get_orphan_functions() -> str:
     """
-    Identify functions that are defined but never called.
+    Identify functions that are defined but never called by any other function.
     """
     try:
         orphans = graph_service.get_orphan_functions()
@@ -156,9 +165,14 @@ if __name__ == "__main__":
         async def health(_: object) -> PlainTextResponse:
             return PlainTextResponse("ok")
 
+        async def mcp_info(_: object) -> PlainTextResponse:
+            # Lightweight probe endpoint so scanners (e.g., Smithery) don't get 405 on GET/HEAD.
+            return PlainTextResponse("LegacyGraph-MCP endpoint", status_code=200)
+
         app = Starlette(
             routes=[
                 Route("/", endpoint=health, methods=["GET", "HEAD"]),
+                Route(args.path, endpoint=mcp_info, methods=["GET", "HEAD"]),
                 Mount(args.path, app=subapp),
             ]
         )
