@@ -63,10 +63,10 @@ Expected output: **100% accuracy** on dependency detection.
 
 ### Option 1: Install via Smithery (Recommended)
 
-To install LegacyGraph-MCP for Claude Desktop automatically via [Smithery](https://smithery.ai/):
+To install LegacyGraph-MCP for Claude Desktop automatically via [Smithery](https://legacy-mcp-analyzer--labsofuniverse.run.tools):
 
 ```bash
-npx -y @smithery/cli install legacy-mcp-analyzer --client claude
+npx -y @smithery/cli@latest mcp add labsofuniverse/legacy-mcp-analyzer --client claude-code
 ```
 
 ### Option 2: Manual Configuration
