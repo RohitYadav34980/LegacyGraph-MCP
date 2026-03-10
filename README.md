@@ -152,12 +152,6 @@ Verifies against a sample legacy C++ project in `data/legacy_project/`.
 
 ---
 
-## 📄 License
-
-MIT License - See [LICENSE](LICENSE) for details.
-
----
-
 ## 🙏 Acknowledgments
 
 Built with:
