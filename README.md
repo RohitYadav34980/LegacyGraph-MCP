@@ -48,7 +48,43 @@ Expected output: **100% accuracy** on dependency detection.
 
 ---
 
-## 📊 Architecture
+## � Installing in your MCP Client
+
+### Option 1: Install via Smithery (Recommended)
+
+To install LegacyGraph-MCP for Claude Desktop automatically via [Smithery](https://smithery.ai/):
+
+```bash
+npx -y @smithery/cli install legacy-mcp-analyzer --client claude
+```
+
+### Option 2: Manual Configuration
+
+1. Clone the repository and install dependencies:
+```bash
+git clone https://github.com/RohitYadav34980/LegacyGraph-MCP.git
+cd LegacyGraph-MCP
+poetry install
+```
+
+2. Add the following to your `claude_desktop_config.json`:
+```json
+{
+  "mcpServers": {
+    "legacy-mcp-analyzer": {
+      "command": "poetry",
+      "args": ["run", "python", "-m", "src.server"],
+      "cwd": "/path/to/LegacyGraph-MCP"
+    }
+  }
+}
+```
+
+Replace `/path/to/LegacyGraph-MCP` with the actual path to your cloned directory.
+
+---
+
+## �📊 Architecture
 
 ```mermaid
 graph LR

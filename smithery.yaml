@@ -1,0 +1,8 @@
+startCommand:
+  type: stdio
+  command: poetry
+  args:
+    - run
+    - python
+    - -m
+    - src.server
