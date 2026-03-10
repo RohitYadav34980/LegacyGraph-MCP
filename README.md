@@ -35,19 +35,20 @@ poetry install
 ```
 
 ### 2. Run Server
-```bash
-poetry run python -m src.server
-```
 
 By default, running this in a normal terminal starts **Streamable HTTP** for easy local development.
 
 ```bash
 # Streamable HTTP (recommended for hosted / URL-based usage)
 poetry run python -m src.server --transport streamable-http --path /mcp
-
+```
+```bash
 # Legacy SSE (only if a client explicitly requires SSE)
 poetry run python -m src.server --transport sse --path /mcp
 ```
+
+#### Deploying on Render (or any PaaS)
+The HTTP server binds to `0.0.0.0:$PORT` automatically (Render sets `PORT`).
 
 ### 3. Verify Installation
 ```bash

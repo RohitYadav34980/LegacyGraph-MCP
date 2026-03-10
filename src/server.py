@@ -2,6 +2,7 @@ from typing import Any, List, Dict
 import argparse
 import asyncio
 import logging
+import os
 import sys
 from src.parser import CppParser
 from src.graph import DependencyGraph, GraphError, CircularDependencyError
@@ -141,4 +142,29 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    mcp.run(transport=args.transport, mount_path=args.path)
+    # FastMCP's built-in `run()` binds to localhost by default, which won't be detected
+    # by platforms like Render. For deployments, we expose an ASGI app and let Uvicorn
+    # bind to 0.0.0.0:$PORT.
+    if args.transport == "streamable-http":
+        from starlette.applications import Starlette
+        from starlette.responses import PlainTextResponse
+        from starlette.routing import Mount, Route
+        import uvicorn
+
+        subapp = mcp.streamable_http_app()
+
+        async def health(_: object) -> PlainTextResponse:
+            return PlainTextResponse("ok")
+
+        app = Starlette(
+            routes=[
+                Route("/", endpoint=health, methods=["GET", "HEAD"]),
+                Mount(args.path, app=subapp),
+            ]
+        )
+
+        port = int(os.environ.get("PORT", "8000"))
+        uvicorn.run(app, host="0.0.0.0", port=port)
+    else:
+        # SSE transport can be mounted at a custom path directly.
+        mcp.run(transport="sse", mount_path=args.path)
