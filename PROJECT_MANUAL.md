@@ -23,11 +23,11 @@ poetry install
 ```
 
 ### Running the Server
-To start the MCP server locally:
+To start the MCP server locally (Streamable HTTP):
 ```bash
-poetry run python -m src.server
+poetry run python -m src.server --transport streamable-http --path /mcp
 ```
-The server works over Stdio. It will wait for MCP JSON-RPC messages.
+The server exposes a Streamable HTTP MCP endpoint at the configured path and waits for MCP JSON-RPC messages over HTTP.
 
 ### Verifying Installation
 Run the included verifier script (requires a test codebase in `data/`):

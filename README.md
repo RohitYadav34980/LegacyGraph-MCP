@@ -39,6 +39,16 @@ poetry install
 poetry run python -m src.server
 ```
 
+By default, running this in a normal terminal starts **Streamable HTTP** for easy local development.
+
+```bash
+# Streamable HTTP (recommended for hosted / URL-based usage)
+poetry run python -m src.server --transport streamable-http --path /mcp
+
+# Legacy SSE (only if a client explicitly requires SSE)
+poetry run python -m src.server --transport sse --path /mcp
+```
+
 ### 3. Verify Installation
 ```bash
 poetry run python tools/verifier.py
@@ -161,4 +171,4 @@ Built with:
 
 ---
 
-**Made for McKinsey LegacyX** 🚀
+**Made with ❤️** 

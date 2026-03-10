@@ -1,6 +1,8 @@
 from typing import Any, List, Dict
+import argparse
 import asyncio
 import logging
+import sys
 from src.parser import CppParser
 from src.graph import DependencyGraph, GraphError, CircularDependencyError
 
@@ -9,16 +11,23 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("mcp_server")
 
 try:
-    from mcp.server.fastmcp import FastMCP # type: ignore
+    from mcp.server.fastmcp import FastMCP  # type: ignore
 except ImportError:
     logger.warning("FastMCP not found. Using mock for logic verification.")
+
     class FastMCP:
-        def __init__(self, name: str): 
+        def __init__(self, name: str):
             self.name = name
-        def tool(self): 
+
+        def tool(self):
             return lambda f: f
-        def run(self): 
-            logger.error("Cannot start server: FastMCP dependency missing. Please `pip install fastmcp`.")
+
+        def run(self, *args, **kwargs):
+            logger.error(
+                "Cannot start server: FastMCP dependency missing. "
+                "Please `pip install fastmcp` or add it to pyproject.toml."
+            )
+
 
 # Initialize Server
 mcp = FastMCP("LegacyGraph-MCP")
@@ -118,4 +127,18 @@ def get_orphan_functions() -> str:
         return f"Error finding orphans: {str(e)}"
 
 if __name__ == "__main__":
-    mcp.run()
+    parser = argparse.ArgumentParser(description="LegacyGraph-MCP server")
+    parser.add_argument(
+        "--transport",
+        choices=["streamable-http", "sse"],
+        default="streamable-http",
+        help="Transport to use. streamable-http is HTTP; sse is legacy.",
+    )
+    parser.add_argument(
+        "--path",
+        default="/mcp",
+        help="Mount path for HTTP/SSE transports (FastMCP mount_path).",
+    )
+    args = parser.parse_args()
+
+    mcp.run(transport=args.transport, mount_path=args.path)
