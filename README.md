@@ -22,6 +22,9 @@ Instead of reading text, the Agent queries the structure:
 * **AST Parsing:** Uses `tree-sitter` for 100% accurate C++ parsing (no Regex).
 * **Graph RAG:** Detects **Circular Dependencies** before refactoring begins.
 * **Universal Compatibility:** Works with Claude Desktop, DeepSeek-Coder, and any MCP client.
+* **Hybrid Deployment:** Runs locally (stdio) or in the cloud (HTTP) — one codebase, two modes.
+* **Omni-Ingestion:** Clone repos, apply patches, upload raw files, or scan local directories.
+* **Token-Safe Visuals:** Bounded Mermaid.js graphs returned inline (cloud) or saved to disk (local).
 
 ---
 
@@ -36,19 +39,29 @@ poetry install
 
 ### 2. Run Server
 
-By default, running this in a normal terminal starts **Streamable HTTP** for easy local development.
-
+#### Local Mode (Cursor / Claude Desktop)
 ```bash
-# Streamable HTTP (recommended for hosted / URL-based usage)
-poetry run python -m src.server --transport streamable-http --path /mcp
+# Default: stdio transport, direct disk access
+poetry run python -m src.server --mode local
 ```
+
+#### Cloud Mode (Smithery / Render)
 ```bash
-# Legacy SSE (only if a client explicitly requires SSE)
-poetry run python -m src.server --transport sse --path /mcp
+# Default: streamable-http transport, ephemeral clones
+poetry run python -m src.server --mode cloud
+```
+
+#### Override Transport
+```bash
+# Force streamable-http in local mode
+poetry run python -m src.server --mode local --transport streamable-http
+
+# Force SSE
+poetry run python -m src.server --mode cloud --transport sse --path /mcp
 ```
 
 #### Deploying on Render (or any PaaS)
-The HTTP server binds to `0.0.0.0:$PORT` automatically (Render sets `PORT`).
+Set `MCP_MODE=cloud` as an environment variable. The HTTP server binds to `0.0.0.0:$PORT` automatically.
 
 ### 3. Verify Installation
 ```bash
@@ -59,7 +72,7 @@ Expected output: **100% accuracy** on dependency detection.
 
 ---
 
-## � Installing in your MCP Client
+## 🔌 Installing in your MCP Client
 
 ### Option 1: Install via Smithery (Recommended)
 
@@ -84,7 +97,7 @@ poetry install
   "mcpServers": {
     "legacy-mcp-analyzer": {
       "command": "poetry",
-      "args": ["run", "python", "-m", "src.server"],
+      "args": ["run", "python", "-m", "src.server", "--mode", "local"],
       "cwd": "/path/to/LegacyGraph-MCP"
     }
   }
@@ -95,7 +108,7 @@ Replace `/path/to/LegacyGraph-MCP` with the actual path to your cloned directory
 
 ---
 
-## �📊 Architecture
+## 📊 Architecture
 
 ```mermaid
 graph LR
@@ -104,24 +117,30 @@ graph LR
     B -->|Query| D[NetworkX Graph]
     C -->|AST| D
     D -->|Cycles/Deps| B
+    E{MCP_MODE} -->|local| F[stdio + Disk]
+    E -->|cloud| G[HTTP + /tmp/ Clone]
 ```
 
 ### Three-Layer Design
 1. **Ingestion Layer** (`src/parser.py`): Tree-sitter-based C++ parsing
-2. **Graph Layer** (`src/graph.py`): NetworkX dependency graph
-3. **Interface Layer** (`src/server.py`): MCP tool exposure
+2. **Graph Layer** (`src/graph.py`): File-aware NetworkX dependency graph
+3. **Interface Layer** (`src/server.py`): MCP tool exposure with hybrid cloud/local mode
 
 ---
 
 ## 🔧 MCP Tools
 
-| Tool                | Description                          | Example Query                       |
-|---------------------|--------------------------------------|-------------------------------------|
-| `analyze_codebase`  | Parses C++ and builds graph          | Analyze entire project              |
-| `get_callers`       | Find upstream dependencies           | Who calls `validate()`?             |
-| `get_callees`       | Find downstream dependencies         | What does `init()` call?            |
-| `detect_cycles`     | Identify circular dependencies       | Are there any loops?                |
-| `get_orphan_functions` | Find unused code                  | Which functions are never called?   |
+| Tool                     | Description                                                   | Mode        |
+|--------------------------|---------------------------------------------------------------|-------------|
+| `analyze_codebase`       | Unified ingestion: repo_url, patch, raw_files, or local dir   | Both        |
+| `get_file_functions`     | List functions defined in a specific source file               | Both        |
+| `get_file_coupling`      | Cross-file coupling report (file A → file B)                  | Both        |
+| `get_callers`            | Find upstream dependencies                                     | Both        |
+| `get_callees`            | Find downstream dependencies                                   | Both        |
+| `detect_cycles`          | Identify circular dependencies                                 | Both        |
+| `get_orphan_functions`   | Find unused code                                               | Both        |
+| `generate_mermaid_graph` | Return Mermaid diagram inline (token-safe)                     | Both        |
+| `export_ide_graph`       | Save Mermaid `.md` file to local disk                          | Local only  |
 
 ---
 
@@ -158,7 +177,7 @@ Verifies against a sample legacy C++ project in `data/legacy_project/`.
 
 ## 📚 Documentation
 
-- **[Project Manual](PROJECT_MANUAL.md)**: In-depth guide and API reference
+- **[Project Manual](PROJECT_MANUAL.md)**: In-depth guide, API reference, and deployment modes
 - **[Implementation Plan](https://github.com/RohitYadav34980/LegacyGraph-MCP/tree/main)**: Original design decisions
 
 ---

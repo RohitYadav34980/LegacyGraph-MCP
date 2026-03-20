@@ -1,5 +1,4 @@
 
-import asyncio
 import os
 import sys
 from typing import Optional
@@ -19,13 +18,17 @@ def run_verification():
         return
 
     print(f"Reading files from: {data_dir}")
-    full_code = ""
+
+    # Build raw_files list from the data directory
+    raw_files = []
     for f in os.listdir(data_dir):
-        if f.endswith(".cpp") or f.endswith(".h"):
-            with open(os.path.join(data_dir, f), "r") as file:
-                full_code += file.read() + "\n"
-    
-    print(f"Total Code Size: {len(full_code)} bytes")
+        if f.endswith((".cpp", ".c", ".h", ".hpp", ".cc")):
+            filepath = os.path.join(data_dir, f)
+            with open(filepath, "r") as file:
+                raw_files.append({"filename": f, "content": file.read()})
+
+    total_bytes = sum(len(rf["content"]) for rf in raw_files)
+    print(f"Total Code Size: {total_bytes} bytes ({len(raw_files)} file(s))")
 
     # --- Ground Truth Definition ---
     EXPECTED_NODES = {
@@ -50,7 +53,7 @@ def run_verification():
     EXPECTED_ORPHANS = {"hidden_backdoor"} # technically 'main' is often an entry point, not orphan.
     
     print("\n--- Step 1: Analyze Codebase ---")
-    result = analyze_codebase(full_code)
+    result = analyze_codebase(raw_files=raw_files)
     print(result)
     
     if "Error" in result:
@@ -58,11 +61,6 @@ def run_verification():
         sys.exit(1)
 
     print("\n--- Step 2: Accuracy Verification ---")
-    
-    # Check Nodes
-    # We can't easily get *all* nodes from the simple tools exposed unless we parse manually or infer from edges + orphans.
-    # But analyze_codebase typically returns a count.
-    # Let's verify Edges extensively as that covers nodes.
     
     found_edges = 0
     total_edges = len(EXPECTED_EDGES)
@@ -83,8 +81,6 @@ def run_verification():
     # Check Cycles
     print("\nChecking Cycle Detection...")
     cycles = detect_cycles()
-    # Expect main_loop recursion
-    # Note: detect_cycles returns a formatted string like "Circular dependencies detected:\n- main_loop -> main_loop"
     has_recursion = "main_loop -> main_loop" in cycles
     if has_recursion:
         print("  [OK] Detected 'main_loop' recursion.")
@@ -94,7 +90,6 @@ def run_verification():
     # Check Orphans
     print("\nChecking Orphan Detection...")
     orphans = get_orphan_functions()
-    # Note: 'main' might be listed as orphan if nothing calls it.
     actual_orphans = set(orphans.replace("Orphan functions (never called): ", "").split(", "))
     
     orphan_hit = 0

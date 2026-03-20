@@ -1,3 +1,5 @@
+import os
+import tempfile
 import pytest
 import networkx as nx
 from src.parser import CppParser, ParseError
@@ -16,7 +18,7 @@ def graph():
     return DependencyGraph()
 
 # ==========================================
-# Test Cases
+# Original Test Cases (updated for filepath parameter)
 # ==========================================
 
 def test_initialization(parser, graph):
@@ -43,13 +45,10 @@ def test_linear_dependency(parser, graph):
     
     # 1. Parse
     parsed_data = parser.parse_source(code)
-    # Expected: [('funcC', {}), ('funcB', {'funcC'}), ('funcA', {'funcB'})]
-    # Note: Order depends on traversal, usually top-down.
-    
     assert len(parsed_data) == 3
     
-    # 2. Build Graph
-    graph.build_from_parsed_data(parsed_data)
+    # 2. Build Graph (with filepath)
+    graph.build_from_parsed_data(parsed_data, filepath="test.cpp")
     
     # 3. Analyze
     assert "funcC" in graph.get_downstream_dependencies("funcB")
@@ -75,12 +74,10 @@ def test_circular_dependency(parser, graph):
     """
     
     parsed_data = parser.parse_source(code)
-    graph.build_from_parsed_data(parsed_data)
+    graph.build_from_parsed_data(parsed_data, filepath="test.cpp")
     
     cycles = graph.detect_cycles()
     assert len(cycles) > 0
-    # Cycle should involve A and B
-    # Cycle format: [['funcA', 'funcB']] or [['funcB', 'funcA']]
     assert any("funcA" in c and "funcB" in c for c in cycles)
 
 # --- Case C: Self-Recursion (A -> A) ---
@@ -91,10 +88,9 @@ def test_self_recursion(parser, graph):
     }
     """
     parsed_data = parser.parse_source(code)
-    graph.build_from_parsed_data(parsed_data)
+    graph.build_from_parsed_data(parsed_data, filepath="test.cpp")
     
     cycles = graph.detect_cycles()
-    # Check for self-loop
     assert len(cycles) == 1
     assert cycles[0] == ["funcA"]
     
@@ -116,20 +112,15 @@ def test_orphan_functions(parser, graph):
     }
     """
     parsed_data = parser.parse_source(code)
-    graph.build_from_parsed_data(parsed_data)
+    graph.build_from_parsed_data(parsed_data, filepath="test.cpp")
     
     orphans = graph.get_orphan_functions()
-    # orphan is def'd and not called.
-    # parent is def'd and not called (it's a root).
-    # child is called by parent.
-    
     assert "orphan" in orphans
     assert "parent" in orphans
     assert "child" not in orphans
 
 # --- Case E: Invalid Syntax (Dirty C++) ---
 def test_invalid_syntax_handling(parser, graph):
-    # Missing semicolon, random text
     code = """
     void validFunc() {
         callMe();
@@ -142,16 +133,269 @@ def test_invalid_syntax_handling(parser, graph):
     }
     """
     
-    # Should not raise exception, tree-sitter is robust
     try:
         parsed_data = parser.parse_source(code)
     except ParseError:
         pytest.fail("Parser crashed on invalid syntax but should have been robust.")
 
-    # It should still find the valid functions (at least the one before the error)
     func_names = [f[0] for f in parsed_data]
     assert "validFunc" in func_names
-    # assert "anotherValid" in func_names # Might be consumed by error recovery
     
-    graph.build_from_parsed_data(parsed_data)
-    # assert "validFunc" in graph.get_downstream_dependencies("anotherValid")
+    graph.build_from_parsed_data(parsed_data, filepath="dirty.cpp")
+
+
+# ==========================================
+# Phase 1 Tests: File-Aware Features
+# ==========================================
+
+# --- Case F: File-Tagged Nodes ---
+def test_file_tagged_nodes(parser, graph):
+    """Nodes should carry the file attribute after build."""
+    code = """
+    void myFunc() {}
+    """
+    parsed_data = parser.parse_source(code)
+    graph.build_from_parsed_data(parsed_data, filepath="src/core.cpp")
+
+    attrs = graph.graph.nodes["myFunc"]
+    assert attrs["file"] == "src/core.cpp"
+
+
+# --- Case G: File Subgraph Isolation ---
+def test_file_subgraph(parser, graph):
+    """get_file_subgraph should return only nodes belonging to the given file."""
+    code_a = """
+    void alphaFunc() { betaFunc(); }
+    """
+    code_b = """
+    void betaFunc() {}
+    void gammaFunc() {}
+    """
+    parsed_a = parser.parse_source(code_a)
+    parsed_b = parser.parse_source(code_b)
+
+    graph.build_from_parsed_data(parsed_a, filepath="file_a.cpp")
+    graph.build_from_parsed_data(parsed_b, filepath="file_b.cpp")
+
+    sub_a = graph.get_file_subgraph("file_a.cpp")
+    sub_b = graph.get_file_subgraph("file_b.cpp")
+
+    assert "alphaFunc" in sub_a.nodes()
+    assert "betaFunc" not in sub_a.nodes()
+
+    assert "betaFunc" in sub_b.nodes()
+    assert "gammaFunc" in sub_b.nodes()
+    assert "alphaFunc" not in sub_b.nodes()
+
+
+# --- Case H: Cross-File Dependencies ---
+def test_cross_file_dependencies(parser, graph):
+    """get_cross_file_dependencies should find calls between different files."""
+    code_main = """
+    void main() { helperA(); }
+    """
+    code_helpers = """
+    void helperA() {}
+    """
+    parsed_main = parser.parse_source(code_main)
+    parsed_helpers = parser.parse_source(code_helpers)
+
+    graph.build_from_parsed_data(parsed_main, filepath="main.cpp")
+    graph.build_from_parsed_data(parsed_helpers, filepath="helpers.cpp")
+
+    cross = graph.get_cross_file_dependencies()
+    assert len(cross) > 0
+
+    # Should contain main -> helperA across files
+    found = any(
+        caller == "main" and callee == "helperA"
+        and cf == "main.cpp" and ef == "helpers.cpp"
+        for caller, cf, callee, ef in cross
+    )
+    assert found, f"Expected cross-file dep main->helperA, got: {cross}"
+
+
+# --- Case I: No Cross-File Dependencies in Single File ---
+def test_no_cross_file_deps_single_file(parser, graph):
+    """All calls within a single file should not appear as cross-file deps."""
+    code = """
+    void inner() {}
+    void outer() { inner(); }
+    """
+    parsed = parser.parse_source(code)
+    graph.build_from_parsed_data(parsed, filepath="single.cpp")
+
+    cross = graph.get_cross_file_dependencies()
+    assert len(cross) == 0
+
+
+# --- Case J: Export IDE Graph to Disk ---
+def test_export_ide_graph(parser, graph):
+    """export_ide_graph should create a .md file with Mermaid content."""
+    from src.server import export_ide_graph, graph_service as srv_graph
+    import src.server as srv_module
+
+    # Force local mode for this test
+    srv_module.MCP_MODE = "local"
+
+    code = """
+    void render() { draw(); }
+    void draw() {}
+    """
+    parsed = parser.parse_source(code)
+    srv_graph.build_from_parsed_data(parsed, filepath="gfx.cpp")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        out_file = os.path.join(tmpdir, "test_graph.md")
+        result = export_ide_graph(output_filename=out_file)
+
+        assert "written" in result.lower() or "success" in result.lower() or "test_graph.md" in result
+        assert os.path.exists(out_file)
+
+        content = open(out_file, encoding="utf-8").read()
+        assert "mermaid" in content
+        assert "graph TD" in content
+        assert "render" in content
+        assert "draw" in content
+
+
+# --- Case K: Empty Subgraph ---
+def test_file_subgraph_empty(graph):
+    """Querying a file with no functions should return an empty subgraph."""
+    sub = graph.get_file_subgraph("nonexistent.cpp")
+    assert len(sub.nodes()) == 0
+
+
+# ==========================================
+# Phase 2-4 Tests: Hybrid Architecture
+# ==========================================
+
+# --- Case L: analyze_codebase with raw_files ---
+def test_analyze_codebase_raw_files():
+    """analyze_codebase should accept raw_files and build the graph."""
+    from src.server import analyze_codebase, graph_service as srv_graph
+    import src.server as srv_module
+
+    srv_module.graph_service = DependencyGraph()
+
+    raw = [
+        {"filename": "main.cpp", "content": "void main() { helper(); }"},
+        {"filename": "utils.cpp", "content": "void helper() {}"},
+    ]
+    result = analyze_codebase(raw_files=raw)
+
+    assert "2" in result  # 2 files parsed
+    assert "error" not in result.lower()
+
+    # Verify graph was populated
+    nodes = srv_module.graph_service.get_all_nodes()
+    assert "main" in nodes
+    assert "helper" in nodes
+
+
+# --- Case M: analyze_codebase with directory_path (local) ---
+def test_analyze_codebase_directory_path_local():
+    """analyze_codebase with directory_path should work in local mode."""
+    from src.server import analyze_codebase
+    import src.server as srv_module
+
+    srv_module.MCP_MODE = "local"
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        cpp_file = os.path.join(tmpdir, "test.cpp")
+        with open(cpp_file, "w") as f:
+            f.write("void foo() { bar(); }\nvoid bar() {}\n")
+
+        result = analyze_codebase(directory_path=tmpdir)
+
+        assert "1" in result  # 1 file parsed
+        assert "error" not in result.lower()
+
+        nodes = srv_module.graph_service.get_all_nodes()
+        assert "foo" in nodes
+        assert "bar" in nodes
+
+
+# --- Case N: analyze_codebase rejects directory_path in cloud mode ---
+def test_analyze_codebase_cloud_rejects_directory_path():
+    """Cloud mode should reject directory_path."""
+    from src.server import analyze_codebase
+    import src.server as srv_module
+
+    srv_module.MCP_MODE = "cloud"
+
+    result = analyze_codebase(directory_path="/some/local/path")
+    assert "error" in result.lower()
+    assert "cloud" in result.lower()
+
+    # Reset to local
+    srv_module.MCP_MODE = "local"
+
+
+# --- Case O: analyze_codebase with no input ---
+def test_analyze_codebase_no_input():
+    """analyze_codebase with no arguments should return an error."""
+    from src.server import analyze_codebase
+
+    result = analyze_codebase()
+    assert "error" in result.lower()
+
+
+# --- Case P: analyze_codebase patch_content without repo_url ---
+def test_analyze_codebase_patch_without_repo():
+    """patch_content without repo_url should fail."""
+    from src.server import analyze_codebase
+
+    result = analyze_codebase(patch_content="diff --git ...")
+    assert "error" in result.lower()
+    assert "repo_url" in result.lower()
+
+
+# --- Case Q: generate_mermaid_graph inline ---
+def test_generate_mermaid_graph():
+    """generate_mermaid_graph should return a Mermaid string, not write a file."""
+    from src.server import generate_mermaid_graph, graph_service as srv_graph, analyze_codebase
+    import src.server as srv_module
+
+    # Populate graph
+    raw = [{"filename": "a.cpp", "content": "void alpha() { beta(); }\nvoid beta() {}"}]
+    analyze_codebase(raw_files=raw)
+
+    result = generate_mermaid_graph()
+
+    assert "mermaid" in result
+    assert "graph TD" in result
+    assert "alpha" in result
+    assert "beta" in result
+
+
+# --- Case R: generate_mermaid_graph with focus_node ---
+def test_generate_mermaid_graph_with_focus():
+    """generate_mermaid_graph with focus_node should limit output."""
+    from src.server import generate_mermaid_graph, analyze_codebase
+
+    raw = [
+        {"filename": "a.cpp", "content": "void a() { b(); }\nvoid b() { c(); }\nvoid c() {}"},
+    ]
+    analyze_codebase(raw_files=raw)
+
+    result = generate_mermaid_graph(focus_node="a", max_depth=1)
+
+    assert "mermaid" in result
+    assert "a" in result
+    assert "b" in result
+
+
+# --- Case S: export_ide_graph blocked in cloud mode ---
+def test_export_ide_graph_blocked_in_cloud():
+    """export_ide_graph should refuse in cloud mode."""
+    from src.server import export_ide_graph
+    import src.server as srv_module
+
+    srv_module.MCP_MODE = "cloud"
+    result = export_ide_graph(output_filename="dummy.md")
+    assert "error" in result.lower()
+    assert "local" in result.lower()
+
+    # Reset
+    srv_module.MCP_MODE = "local"

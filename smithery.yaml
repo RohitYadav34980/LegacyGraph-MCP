@@ -6,3 +6,5 @@ startCommand:
     - python
     - -m
     - src.server
+    - --mode
+    - cloud

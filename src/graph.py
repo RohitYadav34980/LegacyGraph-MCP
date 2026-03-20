@@ -1,6 +1,6 @@
 import logging
 import networkx as nx  # type: ignore
-from typing import List, Set, Dict, Any
+from typing import List, Set, Dict, Any, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -35,15 +35,18 @@ class DependencyGraph:
         """
         self.graph.add_edge(caller, callee)
 
-    def build_from_parsed_data(self, data: List[tuple[str, Set[str]]]) -> None:
+    def build_from_parsed_data(
+        self, data: List[tuple[str, Set[str]]], filepath: str = ""
+    ) -> None:
         """
         Builds the graph from a list of (function_name, called_functions).
 
         Args:
             data: List of tuples (caller, set_of_callees).
+            filepath: The source file this data was parsed from.
         """
         for caller, callees in data:
-            self.graph.add_node(caller)  # Ensure caller exists even if no callees
+            self.graph.add_node(caller, file=filepath)
             for callee in callees:
                 self.add_dependency(caller, callee)
 
@@ -108,3 +111,37 @@ class DependencyGraph:
         But strictly speaking, orphans are those with in-degree 0.
         """
         return [n for n, d in self.graph.in_degree() if d == 0]
+
+    def get_file_subgraph(self, filepath: str) -> "nx.DiGraph":
+        """
+        Returns a subgraph containing only the nodes mapped to the given file.
+
+        Args:
+            filepath: The file path to filter by.
+
+        Returns:
+            A networkx DiGraph subgraph with nodes from that file.
+        """
+        matching_nodes = [
+            n
+            for n, attrs in self.graph.nodes(data=True)
+            if attrs.get("file", "") == filepath
+        ]
+        return self.graph.subgraph(matching_nodes).copy()
+
+    def get_cross_file_dependencies(
+        self,
+    ) -> List[Tuple[str, str, str, str]]:
+        """
+        Returns dependencies where caller and callee reside in different files.
+
+        Returns:
+            List of (caller_name, caller_file, callee_name, callee_file) tuples.
+        """
+        cross_deps: List[Tuple[str, str, str, str]] = []
+        for caller, callee in self.graph.edges():
+            caller_file: str = self.graph.nodes[caller].get("file", "")
+            callee_file: str = self.graph.nodes[callee].get("file", "")
+            if caller_file and callee_file and caller_file != callee_file:
+                cross_deps.append((caller, caller_file, callee, callee_file))
+        return cross_deps
