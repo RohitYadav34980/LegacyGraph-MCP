@@ -3,6 +3,7 @@
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/)
 [![MCP Protocol](https://img.shields.io/badge/MCP-Enabled-green.svg)](https://modelcontextprotocol.io/)
 [![Code Style: Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![smithery badge](https://smithery.ai/badge/labsofuniverse/legacy-mcp-analyzer)](https://smithery.ai/servers/labsofuniverse/legacy-mcp-analyzer)
 
 ## ⚡ The Problem
 Legacy modernization using standard LLMs fails because:
@@ -76,10 +77,10 @@ Expected output: **100% accuracy** on dependency detection.
 
 ### Option 1: Install via Smithery (Recommended)
 
-To install LegacyGraph-MCP for Claude Desktop automatically via [Smithery](https://smithery.ai/):
+To install LegacyGraph-MCP for Claude Desktop automatically via [Smithery](https://legacy-mcp-analyzer--labsofuniverse.run.tools):
 
 ```bash
-npx -y @smithery/cli install legacy-mcp-analyzer --client claude
+npx -y @smithery/cli@latest mcp add labsofuniverse/legacy-mcp-analyzer --client claude-code
 ```
 
 ### Option 2: Manual Configuration
