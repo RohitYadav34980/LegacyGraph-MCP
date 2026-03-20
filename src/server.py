@@ -41,9 +41,9 @@ except ImportError:
 # ============================================================
 # Deployment Mode
 # ============================================================
-# Resolved at startup from --mode arg or MCP_MODE env var.
-# "local"  → direct disk access, stdio transport, export_ide_graph writes files
-# "cloud"  → ephemeral /tmp/ clones, HTTP transport, generate_mermaid_graph returns inline
+# Resolved at startup from --mode arg, --transport hint, or MCP_MODE env var.
+# "local"  → direct disk access, stdio transport, export_ide_graph available
+# "cloud"  → ephemeral /tmp/ clones, HTTP transport, export_ide_graph hidden
 MCP_MODE: str = os.environ.get("MCP_MODE", "local")
 
 # C++ file extensions to scan
@@ -54,11 +54,8 @@ mcp = FastMCP(
     name="legacy-mcp-analyzer",
     instructions=(
         "LegacyGraph-MCP exposes a parsed C++ call graph over MCP. "
-        "Use analyze_codebase to ingest code (from a GitHub URL, raw files, "
-        "or a local directory), then explore file-by-file with "
-        "get_file_functions, inspect cross-file coupling, query "
-        "callers/callees, detect cycles, find orphans, and generate "
-        "visual Mermaid graphs."
+        "Use analyze_codebase to ingest code (via repo_url, raw_files, "
+        "or directory_path), then query the graph with the other tools."
     ),
     website_url="https://github.com/RohitYadav34980/LegacyGraph-MCP",
     # Configure HTTP binding for hosted environments (e.g., Render).
@@ -212,10 +209,13 @@ def _build_mermaid_string(
 
 
 # ============================================================
-# Tool: Unified Omni-Ingestion
+# Tool Functions (defined as plain functions, registered below)
+# ============================================================
+# NOTE: These functions are NOT decorated with @mcp.tool().
+# Registration happens in _register_tools() so we can
+# conditionally include/exclude tools based on MCP_MODE.
 # ============================================================
 
-@mcp.tool()
 def analyze_codebase(
     repo_url: Optional[str] = None,
     patch_content: Optional[str] = None,
@@ -223,25 +223,33 @@ def analyze_codebase(
     directory_path: Optional[str] = None,
 ) -> str:
     """
-    Parse a C++ codebase and build the dependency graph.
+    Ingest a C++ codebase and build its dependency graph.
+    This tool does NOT accept 'code_content'. Provide exactly ONE of:
+    repo_url, raw_files, or directory_path.
 
-    Supports multiple ingestion workflows — provide ONE of the following:
-
-    1. **repo_url** — Clone a public GitHub repo (cloud-friendly).
-       Optionally pair with **patch_content** (a git diff string) to layer
-       uncommitted changes on top of the clone.
-    2. **raw_files** — Array of {"filename": "main.cpp", "content": "..."} objects
-       for small, non-git projects.
-    3. **directory_path** — Absolute path to a local directory (local mode only).
+    - repo_url: an HTTPS GitHub URL (e.g. 'https://github.com/user/repo').
+      Optionally add patch_content (a unified diff string) to overlay
+      uncommitted changes on the cloned repo.
+    - raw_files: for hobby projects or small codebases NOT hosted on GitHub.
+      The user pastes their C++ code directly and you wrap each file into a
+      JSON array of objects with 'filename' and 'content' keys. Example:
+      [
+        {"filename": "main.cpp", "content": "void main() { helper(); }"},
+        {"filename": "utils.cpp", "content": "void helper() {}"}
+      ]
+    - directory_path: absolute local filesystem path (local mode only;
+      rejected when the server runs in cloud mode).
 
     Args:
         repo_url:        HTTPS URL of a git repository to clone.
-        patch_content:   A unified-diff patch to apply after cloning repo_url.
-        raw_files:       List of file dicts [{"filename": str, "content": str}].
-        directory_path:  Local filesystem path to scan (rejected in cloud mode).
+        patch_content:   Unified diff to apply after cloning repo_url.
+        raw_files:       List of dicts [{"filename": str, "content": str}].
+                         Use this when the user shares code snippets directly
+                         and does not have a git repository.
+        directory_path:  Local path to scan (local mode only).
 
     Returns:
-        A status message with the number of files parsed and functions tracked.
+        Status message with file count and function count.
     """
     global graph_service
 
@@ -347,23 +355,18 @@ def analyze_codebase(
     return "Error: No valid input pathway matched."
 
 
-# ============================================================
-# Tool: File-Level Function Listing
-# ============================================================
-
-@mcp.tool()
 def get_file_functions(filepath: str) -> str:
     """
     List all functions defined in a specific source file.
 
-    Use the relative path as returned by analyze_codebase
-    (e.g., 'src/engine.cpp').
+    Use the relative path exactly as returned in the analyze_codebase
+    output (e.g., 'src/engine.cpp' or 'main.cpp').
 
     Args:
-        filepath: Relative path of the source file within the workspace.
+        filepath: Relative path of the source file within the analyzed workspace.
 
     Returns:
-        A newline-separated list of function names, or a message if none found.
+        A newline-separated list of function names, or no-match message.
     """
     try:
         subgraph = graph_service.get_file_subgraph(filepath)
@@ -378,11 +381,6 @@ def get_file_functions(filepath: str) -> str:
         return f"Error retrieving functions for '{filepath}': {str(e)}"
 
 
-# ============================================================
-# Tool: Cross-File Coupling Report
-# ============================================================
-
-@mcp.tool()
 def get_file_coupling() -> str:
     """
     Generate a report showing which files depend on which other files.
@@ -412,14 +410,15 @@ def get_file_coupling() -> str:
         return f"Error generating coupling report: {str(e)}"
 
 
-# ============================================================
-# Existing Tools (unchanged logic)
-# ============================================================
-
-@mcp.tool()
 def get_callers(function_name: str) -> str:
     """
     List upstream functions that call the given function.
+
+    Args:
+        function_name: Exact name of the function (e.g., 'calculate_interest').
+
+    Returns:
+        Comma-separated list of caller function names.
     """
     try:
         callers = graph_service.get_upstream_callers(function_name)
@@ -430,10 +429,15 @@ def get_callers(function_name: str) -> str:
         return f"Error: {str(e)}"
 
 
-@mcp.tool()
 def get_callees(function_name: str) -> str:
     """
     List downstream functions that are called by the given function.
+
+    Args:
+        function_name: Exact name of the function (e.g., 'process_client').
+
+    Returns:
+        Comma-separated list of callee function names.
     """
     try:
         callees = graph_service.get_downstream_dependencies(function_name)
@@ -444,10 +448,12 @@ def get_callees(function_name: str) -> str:
         return f"Error: {str(e)}"
 
 
-@mcp.tool()
 def detect_cycles() -> str:
     """
     Detect circular dependencies in the current call graph.
+
+    Returns:
+        Formatted list of cycles, or a message if none found.
     """
     try:
         cycles = graph_service.detect_cycles()
@@ -460,10 +466,12 @@ def detect_cycles() -> str:
         return f"Error detecting cycles: {str(e)}"
 
 
-@mcp.tool()
 def get_orphan_functions() -> str:
     """
     Identify functions that are defined but never called by any other function.
+
+    Returns:
+        Comma-separated list of orphan function names.
     """
     try:
         orphans = graph_service.get_orphan_functions()
@@ -474,11 +482,6 @@ def get_orphan_functions() -> str:
         return f"Error finding orphans: {str(e)}"
 
 
-# ============================================================
-# Tool: Generate Mermaid Graph (Cloud — inline return)
-# ============================================================
-
-@mcp.tool()
 def generate_mermaid_graph(
     focus_node: Optional[str] = None,
     max_depth: int = 2,
@@ -486,16 +489,15 @@ def generate_mermaid_graph(
     """
     Generate a Mermaid.js dependency diagram and return it as a markdown string.
 
-    Best for cloud / hosted mode: the AI renders the diagram inline via
-    its native Mermaid support. For large graphs, specify a focus_node and
-    max_depth to keep the output small and token-efficient.
+    The AI can render this diagram inline in the chat. For large graphs,
+    use focus_node and max_depth to keep the output token-efficient.
 
     Args:
         focus_node: Optional function name to centre the graph on.
-        max_depth:  Maximum traversal depth from focus_node (default 2).
+        max_depth:  Max hops from focus_node (default 2).
 
     Returns:
-        A Mermaid-fenced markdown string ready for inline rendering.
+        A Mermaid-fenced markdown string for inline rendering.
     """
     try:
         return _build_mermaid_string(focus_node=focus_node, max_depth=max_depth)
@@ -505,31 +507,24 @@ def generate_mermaid_graph(
         return f"Error generating Mermaid graph: {str(e)}"
 
 
-# ============================================================
-# Tool: Export Mermaid Graph to Disk (Local — file save)
-# ============================================================
-
-@mcp.tool()
 def export_ide_graph(
     output_filename: str,
     focus_node: Optional[str] = None,
     max_depth: int = 2,
 ) -> str:
     """
-    Export the dependency graph as a Mermaid.js diagram to a local .md file.
+    Save the dependency graph as a Mermaid.js diagram to a local .md file.
 
-    Best for local mode: saves directly to the user's disk so the IDE can
-    render it. If focus_node is provided, only the neighbourhood within
-    max_depth hops is included.
+    Only available in local mode. Writes directly to the user's disk.
 
     Args:
         output_filename: Path for the output .md file (e.g., 'graph.md').
         focus_node: Optional function name to centre the graph on.
-        max_depth: Maximum traversal depth from focus_node (default 2).
+        max_depth: Max hops from focus_node (default 2).
 
     Returns:
-        A success message. Instruct the user to open the file in their
-        IDE's Markdown Preview — do NOT read the file content yourself.
+        A success message. Tell the user to open the file in their IDE's
+        Markdown Preview — do NOT read the file content yourself.
     """
     if MCP_MODE == "cloud":
         return (
@@ -540,7 +535,6 @@ def export_ide_graph(
     try:
         content = _build_mermaid_string(focus_node=focus_node, max_depth=max_depth)
 
-        # Write to disk
         output_path = Path(output_filename)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(content, encoding="utf-8")
@@ -557,12 +551,89 @@ def export_ide_graph(
 
 
 # ============================================================
+# Tool Registration (mode-aware)
+# ============================================================
+
+def _register_tools(mode: str) -> None:
+    """
+    Register MCP tools on the FastMCP instance.
+
+    Called from __main__ AFTER the deployment mode is resolved so that
+    cloud mode never exposes local-only tools like export_ide_graph.
+    """
+    # Always available
+    mcp.tool()(analyze_codebase)
+    mcp.tool()(get_file_functions)
+    mcp.tool()(get_file_coupling)
+    mcp.tool()(get_callers)
+    mcp.tool()(get_callees)
+    mcp.tool()(detect_cycles)
+    mcp.tool()(get_orphan_functions)
+    mcp.tool()(generate_mermaid_graph)
+
+    # Local-only tools
+    if mode == "local":
+        mcp.tool()(export_ide_graph)
+        logger.info("Registered local-only tool: export_ide_graph")
+    else:
+        logger.info("Cloud mode: export_ide_graph is NOT registered.")
+
+
+# ============================================================
 # Server Card
 # ============================================================
 
 @mcp.custom_route("/.well-known/mcp/server-card.json", methods=["GET"])
 async def server_card(_: object) -> "JSONResponse":
     from starlette.responses import JSONResponse
+
+    tools: List[Dict[str, str]] = [
+        {
+            "name": "analyze_codebase",
+            "description": (
+                "Ingest C++ code. Accepts repo_url (GitHub clone), "
+                "raw_files (JSON array of {filename, content}), or "
+                "directory_path (local only). Does NOT accept code_content."
+            ),
+        },
+        {
+            "name": "get_file_functions",
+            "description": "List all functions defined in a specific source file.",
+        },
+        {
+            "name": "get_file_coupling",
+            "description": "Cross-file coupling report showing inter-file dependencies.",
+        },
+        {
+            "name": "get_callers",
+            "description": "List upstream functions that call the given function.",
+        },
+        {
+            "name": "get_callees",
+            "description": "List downstream functions called by the given function.",
+        },
+        {
+            "name": "detect_cycles",
+            "description": "Detect circular dependencies in the call graph.",
+        },
+        {
+            "name": "get_orphan_functions",
+            "description": "Identify functions that are defined but never called.",
+        },
+        {
+            "name": "generate_mermaid_graph",
+            "description": "Return a Mermaid.js diagram as an inline markdown string.",
+        },
+    ]
+
+    # Only advertise export_ide_graph in local mode
+    if MCP_MODE == "local":
+        tools.append(
+            {
+                "name": "export_ide_graph",
+                "description": "Save a Mermaid.js diagram to a local .md file (local mode only).",
+            }
+        )
 
     return JSONResponse(
         {
@@ -574,48 +645,7 @@ async def server_card(_: object) -> "JSONResponse":
                 "modes": ["local", "cloud"],
                 "currentMode": MCP_MODE,
             },
-            "tools": [
-                {
-                    "name": "analyze_codebase",
-                    "description": (
-                        "Unified ingestion: clone a repo (repo_url), apply "
-                        "patches (patch_content), parse raw files (raw_files), "
-                        "or scan a local directory (directory_path, local mode only)."
-                    ),
-                },
-                {
-                    "name": "get_file_functions",
-                    "description": "List all functions defined in a specific source file.",
-                },
-                {
-                    "name": "get_file_coupling",
-                    "description": "Generate a cross-file coupling report showing inter-file dependencies.",
-                },
-                {
-                    "name": "get_callers",
-                    "description": "List upstream functions that call the given function.",
-                },
-                {
-                    "name": "get_callees",
-                    "description": "List downstream functions that are called by the given function.",
-                },
-                {
-                    "name": "detect_cycles",
-                    "description": "Detect circular dependencies in the current call graph.",
-                },
-                {
-                    "name": "get_orphan_functions",
-                    "description": "Identify functions that are defined but never called.",
-                },
-                {
-                    "name": "generate_mermaid_graph",
-                    "description": "Return a Mermaid.js diagram as an inline markdown string (cloud-friendly).",
-                },
-                {
-                    "name": "export_ide_graph",
-                    "description": "Save a Mermaid.js diagram to a local .md file (local mode only).",
-                },
-            ],
+            "tools": tools,
             "resources": [],
             "prompts": [],
         }
@@ -631,14 +661,19 @@ if __name__ == "__main__":
     parser.add_argument(
         "--mode",
         choices=["local", "cloud"],
-        default=os.environ.get("MCP_MODE", "local"),
-        help="Deployment mode. 'local' uses stdio + disk; 'cloud' uses HTTP + ephemeral clones.",
+        default=None,
+        help=(
+            "Deployment mode. 'local' = stdio + disk access; "
+            "'cloud' = HTTP + ephemeral clones. "
+            "Auto-detected from --transport if not set. "
+            "Override with MCP_MODE env var."
+        ),
     )
     parser.add_argument(
         "--transport",
         choices=["streamable-http", "sse", "stdio"],
         default=None,
-        help="Override transport. Defaults to stdio (local) or streamable-http (cloud).",
+        help="Transport protocol. Defaults to stdio (local) or streamable-http (cloud).",
     )
     parser.add_argument(
         "--path",
@@ -647,14 +682,27 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    # Set module-level mode for tool guards
-    MCP_MODE = args.mode
+    # ---- Resolve mode --------------------------------------------
+    # Priority: explicit --mode > MCP_MODE env > auto-detect from transport
+    if args.mode is not None:
+        MCP_MODE = args.mode
+    elif os.environ.get("MCP_MODE"):
+        MCP_MODE = os.environ["MCP_MODE"]
+    elif args.transport in ("streamable-http", "sse"):
+        # HTTP transport almost certainly means cloud / remote hosting
+        MCP_MODE = "cloud"
+    else:
+        MCP_MODE = "local"
+
     os.environ["MCP_MODE"] = MCP_MODE
 
-    # Select transport: explicit flag > mode default
+    # ---- Resolve transport ----------------------------------------
     transport = args.transport
     if transport is None:
         transport = "stdio" if MCP_MODE == "local" else "streamable-http"
+
+    # ---- Register tools based on mode ----------------------------
+    _register_tools(MCP_MODE)
 
     logger.info(f"Starting LegacyGraph-MCP  mode={MCP_MODE}  transport={transport}")
 
