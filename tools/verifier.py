@@ -6,7 +6,7 @@ from typing import Optional
 # Ensure src is in pythonpath
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from src.server import analyze_codebase, get_callers, get_callees, detect_cycles, get_orphan_functions
+from src.tools import analyze_codebase, get_callers, get_callees, detect_cycles, get_orphan_functions
 
 def run_verification():
     print("=== Starting LegacyGraph-MCP Verification ===")

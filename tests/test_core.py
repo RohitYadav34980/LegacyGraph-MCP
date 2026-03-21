@@ -2,8 +2,8 @@ import os
 import tempfile
 import pytest
 import networkx as nx
-from src.parser import CppParser, ParseError
-from src.graph import DependencyGraph, GraphError, CircularDependencyError
+from src.core.parser import CppParser, ParseError
+from src.core.graph import DependencyGraph, GraphError, CircularDependencyError
 
 # ==========================================
 # Fixtures
@@ -232,18 +232,19 @@ def test_no_cross_file_deps_single_file(parser, graph):
 # --- Case J: Export IDE Graph to Disk ---
 def test_export_ide_graph(parser, graph):
     """export_ide_graph should create a .md file with Mermaid content."""
-    from src.server import export_ide_graph, graph_service as srv_graph
-    import src.server as srv_module
+    from src.tools.export import export_ide_graph
+    import src.utils.services as services
+    import src.utils.config as config
 
     # Force local mode for this test
-    srv_module.MCP_MODE = "local"
+    config.MCP_MODE = "local"
 
     code = """
     void render() { draw(); }
     void draw() {}
     """
     parsed = parser.parse_source(code)
-    srv_graph.build_from_parsed_data(parsed, filepath="gfx.cpp")
+    services.graph_service.build_from_parsed_data(parsed, filepath="gfx.cpp")
 
     with tempfile.TemporaryDirectory() as tmpdir:
         out_file = os.path.join(tmpdir, "test_graph.md")
@@ -273,10 +274,10 @@ def test_file_subgraph_empty(graph):
 # --- Case L: analyze_codebase with raw_files ---
 def test_analyze_codebase_raw_files():
     """analyze_codebase should accept raw_files and build the graph."""
-    from src.server import analyze_codebase, graph_service as srv_graph
-    import src.server as srv_module
+    from src.tools.analysis import analyze_codebase
+    import src.utils.services as services
 
-    srv_module.graph_service = DependencyGraph()
+    services.graph_service = DependencyGraph()
 
     raw = [
         {"filename": "main.cpp", "content": "void main() { helper(); }"},
@@ -288,7 +289,7 @@ def test_analyze_codebase_raw_files():
     assert "error" not in result.lower()
 
     # Verify graph was populated
-    nodes = srv_module.graph_service.get_all_nodes()
+    nodes = services.graph_service.get_all_nodes()
     assert "main" in nodes
     assert "helper" in nodes
 
@@ -296,10 +297,11 @@ def test_analyze_codebase_raw_files():
 # --- Case M: analyze_codebase with directory_path (local) ---
 def test_analyze_codebase_directory_path_local():
     """analyze_codebase with directory_path should work in local mode."""
-    from src.server import analyze_codebase
-    import src.server as srv_module
+    from src.tools.analysis import analyze_codebase
+    import src.utils.config as config
+    import src.utils.services as services
 
-    srv_module.MCP_MODE = "local"
+    config.MCP_MODE = "local"
 
     with tempfile.TemporaryDirectory() as tmpdir:
         cpp_file = os.path.join(tmpdir, "test.cpp")
@@ -311,7 +313,7 @@ def test_analyze_codebase_directory_path_local():
         assert "1" in result  # 1 file parsed
         assert "error" not in result.lower()
 
-        nodes = srv_module.graph_service.get_all_nodes()
+        nodes = services.graph_service.get_all_nodes()
         assert "foo" in nodes
         assert "bar" in nodes
 
@@ -319,23 +321,23 @@ def test_analyze_codebase_directory_path_local():
 # --- Case N: analyze_codebase rejects directory_path in cloud mode ---
 def test_analyze_codebase_cloud_rejects_directory_path():
     """Cloud mode should reject directory_path."""
-    from src.server import analyze_codebase
-    import src.server as srv_module
+    from src.tools.analysis import analyze_codebase
+    import src.utils.config as config
 
-    srv_module.MCP_MODE = "cloud"
+    config.MCP_MODE = "cloud"
 
     result = analyze_codebase(directory_path="/some/local/path")
     assert "error" in result.lower()
     assert "cloud" in result.lower()
 
     # Reset to local
-    srv_module.MCP_MODE = "local"
+    config.MCP_MODE = "local"
 
 
 # --- Case O: analyze_codebase with no input ---
 def test_analyze_codebase_no_input():
     """analyze_codebase with no arguments should return an error."""
-    from src.server import analyze_codebase
+    from src.tools.analysis import analyze_codebase
 
     result = analyze_codebase()
     assert "error" in result.lower()
@@ -344,7 +346,7 @@ def test_analyze_codebase_no_input():
 # --- Case P: analyze_codebase patch_content without repo_url ---
 def test_analyze_codebase_patch_without_repo():
     """patch_content without repo_url should fail."""
-    from src.server import analyze_codebase
+    from src.tools.analysis import analyze_codebase
 
     result = analyze_codebase(patch_content="diff --git ...")
     assert "error" in result.lower()
@@ -354,8 +356,8 @@ def test_analyze_codebase_patch_without_repo():
 # --- Case Q: generate_mermaid_graph inline ---
 def test_generate_mermaid_graph():
     """generate_mermaid_graph should return a Mermaid string, not write a file."""
-    from src.server import generate_mermaid_graph, graph_service as srv_graph, analyze_codebase
-    import src.server as srv_module
+    from src.tools.export import generate_mermaid_graph
+    from src.tools.analysis import analyze_codebase
 
     # Populate graph
     raw = [{"filename": "a.cpp", "content": "void alpha() { beta(); }\nvoid beta() {}"}]
@@ -372,7 +374,8 @@ def test_generate_mermaid_graph():
 # --- Case R: generate_mermaid_graph with focus_node ---
 def test_generate_mermaid_graph_with_focus():
     """generate_mermaid_graph with focus_node should limit output."""
-    from src.server import generate_mermaid_graph, analyze_codebase
+    from src.tools.export import generate_mermaid_graph
+    from src.tools.analysis import analyze_codebase
 
     raw = [
         {"filename": "a.cpp", "content": "void a() { b(); }\nvoid b() { c(); }\nvoid c() {}"},
@@ -389,13 +392,13 @@ def test_generate_mermaid_graph_with_focus():
 # --- Case S: export_ide_graph blocked in cloud mode ---
 def test_export_ide_graph_blocked_in_cloud():
     """export_ide_graph should refuse in cloud mode."""
-    from src.server import export_ide_graph
-    import src.server as srv_module
+    from src.tools.export import export_ide_graph
+    import src.utils.config as config
 
-    srv_module.MCP_MODE = "cloud"
+    config.MCP_MODE = "cloud"
     result = export_ide_graph(output_filename="dummy.md")
     assert "error" in result.lower()
     assert "local" in result.lower()
 
     # Reset
-    srv_module.MCP_MODE = "local"
+    config.MCP_MODE = "local"
