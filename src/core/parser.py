@@ -32,8 +32,10 @@ class CppParser:
             raise ParseError("tree-sitter or tree-sitter-cpp not cached/installed correctly.")
 
         try:
-            CPP_LANGUAGE = Language(ts_cpp.language())
-            self.parser = Parser(CPP_LANGUAGE)
+            self.cpp_language = Language(ts_cpp.language())
+            self.parser = Parser(self.cpp_language)
+            self.func_query = self.cpp_language.query("(function_definition) @func")
+            self.call_query = self.cpp_language.query("(call_expression) @call")
         except Exception as e:
             logger.error(f"Failed to initialize tree-sitter parser: {e}")
             raise ParseError(f"Parser initialization failed: {e}")
@@ -60,10 +62,8 @@ class CppParser:
 
             # Use a Query to find all function definitions anywhere in the tree
             # This is robust against hierarchy changes caused by syntax errors
-            CPP_LANGUAGE = Language(ts_cpp.language())
-            func_query = CPP_LANGUAGE.query("(function_definition) @func")
             # captures(node) returns Dict[str, List[Node]] in newer bindings
-            captures = func_query.captures(root_node)
+            captures = self.func_query.captures(root_node)
 
             # Handle both list (older) and dict (newer) return types just in case, 
             # but based on debug we know it is dict.
@@ -124,10 +124,7 @@ class CppParser:
         """
         calls: Set[str] = set()
         
-        CPP_LANGUAGE = Language(ts_cpp.language())
-        call_query = CPP_LANGUAGE.query("(call_expression) @call")
-        
-        captures = call_query.captures(root_node)
+        captures = self.call_query.captures(root_node)
         
         if isinstance(captures, dict):
             for name, nodes in captures.items():

@@ -1,6 +1,9 @@
+import json
 import logging
+import os
+from typing import Any, Dict, List, Set, Tuple
+
 import networkx as nx  # type: ignore
-from typing import List, Set, Dict, Any, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +27,59 @@ class DependencyGraph:
     def __init__(self) -> None:
         """Initialize an empty directed graph."""
         self.graph = nx.DiGraph()
+        self.file_mtimes: Dict[str, float] = {}
+
+    def remove_file_nodes(self, filepath: str) -> None:
+        """Removes all nodes associated with a specific file."""
+        nodes_to_remove = [
+            n for n, attrs in self.graph.nodes(data=True)
+            if attrs.get("file", "") == filepath
+        ]
+        self.graph.remove_nodes_from(nodes_to_remove)
+
+    def save_cache(self, cache_path: str) -> None:
+        """Serializes the graph and mtimes to disk using JSON (safe format)."""
+        try:
+            payload: Dict[str, Any] = {
+                "nodes": [
+                    [n, dict(attrs)]
+                    for n, attrs in self.graph.nodes(data=True)
+                ],
+                "edges": list(self.graph.edges()),
+                "file_mtimes": self.file_mtimes,
+            }
+            with open(cache_path, "w", encoding="utf-8") as f:
+                json.dump(payload, f, separators=(",", ":"))
+            logger.info(f"Saved graph cache to {cache_path}")
+        except Exception as e:
+            logger.warning(f"Failed to save graph cache: {e}")
+
+    def load_cache(self, cache_path: str) -> bool:
+        """
+        Deserializes the graph and mtimes from a JSON cache file.
+
+        Pickle is intentionally not used here — loading pickle from an
+        untrusted repo directory would allow arbitrary code execution.
+        """
+        try:
+            if not os.path.exists(cache_path):
+                return False
+            with open(cache_path, "r", encoding="utf-8") as f:
+                data: Dict[str, Any] = json.load(f)
+
+            g: nx.DiGraph = nx.DiGraph()
+            for node_name, attrs in data.get("nodes", []):
+                g.add_node(node_name, **attrs)
+            for u, v in data.get("edges", []):
+                g.add_edge(u, v)
+
+            self.graph = g
+            self.file_mtimes = data.get("file_mtimes", {})
+            logger.info(f"Loaded graph cache from {cache_path}")
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to load graph cache: {e}")
+            return False
 
     def add_dependency(self, caller: str, callee: str) -> None:
         """

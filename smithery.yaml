@@ -5,6 +5,8 @@ startCommand:
     - run
     - python
     - -m
-    - src.server
+    - src
     - --mode
     - cloud
+    - --transport
+    - stdio
