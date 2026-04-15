@@ -232,12 +232,9 @@ def _print_comparison(normal: BenchmarkResult, constrained: BenchmarkResult) -> 
 
 if __name__ == "__main__":
     # ── Configuration ──────────────────────────────────────────────
-    USE_LOCAL_DIR = True
-
-    if USE_LOCAL_DIR:
-        TARGET = r"C:\Users\yadav\OneDrive\Desktop\LegacyX_MCP\.llvm\llvm-project"
-    else:
-        TARGET = "https://github.com/nlohmann/json"
+    local_target = os.environ.get("LEGACYMCP_BENCHMARK_LOCAL_DIR")
+    USE_LOCAL_DIR = bool(local_target)
+    TARGET = local_target or "https://github.com/nlohmann/json"
 
     # ── Profile 1: normal ──────────────────────────────────────────
     logger.info("=" * 60)
@@ -258,4 +255,3 @@ if __name__ == "__main__":
 
     # ── Comparison & recommendation ────────────────────────────────
     _print_comparison(normal_result, constrained_result)
-

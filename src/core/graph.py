@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+from pathlib import Path
 from typing import Any, Dict, List, Set, Tuple
 
 import networkx as nx  # type: ignore
@@ -40,6 +41,12 @@ class DependencyGraph:
     def save_cache(self, cache_path: str) -> None:
         """Serializes the graph and mtimes to disk using JSON (safe format)."""
         try:
+            cache_file = Path(cache_path)
+            if cache_file.is_symlink():
+                logger.warning(f"Refusing to write cache symlink: {cache_path}")
+                return
+            cache_file.parent.mkdir(parents=True, exist_ok=True)
+
             payload: Dict[str, Any] = {
                 "nodes": [
                     [n, dict(attrs)]
@@ -48,7 +55,11 @@ class DependencyGraph:
                 "edges": list(self.graph.edges()),
                 "file_mtimes": self.file_mtimes,
             }
-            with open(cache_path, "w", encoding="utf-8") as f:
+            flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+            if hasattr(os, "O_NOFOLLOW"):
+                flags |= os.O_NOFOLLOW
+            fd = os.open(cache_path, flags, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
                 json.dump(payload, f, separators=(",", ":"))
             logger.info(f"Saved graph cache to {cache_path}")
         except Exception as e:
@@ -62,6 +73,10 @@ class DependencyGraph:
         untrusted repo directory would allow arbitrary code execution.
         """
         try:
+            cache_file = Path(cache_path)
+            if cache_file.is_symlink():
+                logger.warning(f"Refusing to load cache symlink: {cache_path}")
+                return False
             if not os.path.exists(cache_path):
                 return False
             with open(cache_path, "r", encoding="utf-8") as f:

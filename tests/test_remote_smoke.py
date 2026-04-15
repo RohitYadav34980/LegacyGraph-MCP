@@ -47,10 +47,12 @@ def _cloud_mode_and_fresh_graph():
     Restores to local mode on teardown so other test modules are unaffected.
     """
     original_mode = config.MCP_MODE
+    original_graph_service = services.graph_service
     config.MCP_MODE = "cloud"
     services.graph_service = DependencyGraph()
     yield
     config.MCP_MODE = original_mode
+    services.graph_service = original_graph_service
 
 
 # ---------------------------------------------------------------------------
@@ -95,7 +97,9 @@ def test_cloud_analyze_raw_files():
     result = analyze_codebase(raw_files=_SAMPLE_RAW_FILES)
 
     assert "error" not in result.lower(), f"Unexpected error: {result}"
-    assert "2" in result, f"Expected '2 file(s)' in result; got: {result}"
+    assert "2 raw file(s)" in result, (
+        f"Expected '2 raw file(s)' in result; got: {result}"
+    )
 
     nodes = services.graph_service.get_all_nodes()
     assert "main" in nodes
@@ -116,8 +120,8 @@ def test_cloud_get_callers():
     result = get_callers("logger")
 
     # Result is a formatted string; verifiable by checking for caller names
-    assert "helper" in result or "main" in result, (
-        f"Expected at least one caller of 'logger'; got: {result}"
+    assert "helper" in result and "main" in result, (
+        f"Expected callers of 'logger' to include both 'helper' and 'main'; got: {result}"
     )
 
 
@@ -133,8 +137,8 @@ def test_cloud_get_callees():
     analyze_codebase(raw_files=_SAMPLE_RAW_FILES)
     result = get_callees("main")
 
-    assert "helper" in result or "logger" in result, (
-        f"Expected callees of 'main'; got: {result}"
+    assert "helper" in result and "logger" in result, (
+        f"Expected callees of 'main' to include both 'helper' and 'logger'; got: {result}"
     )
 
 

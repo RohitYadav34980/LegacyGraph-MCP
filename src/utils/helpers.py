@@ -4,7 +4,7 @@ import shutil
 import os
 import concurrent.futures
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Set, Tuple
 
 from src.core.graph import GraphError
 from src.core.parser import CppParser
@@ -17,7 +17,9 @@ import src.utils.services as services
 # Internal Helpers
 # ============================================================
 
-def _parse_chunk_worker(chunk: list[Tuple[str, str]]) -> list[tuple[str, list, float]]:
+def _parse_chunk_worker(
+    chunk: list[Tuple[str, str]],
+) -> list[tuple[str, list[tuple[str, Set[str]]], float]]:
     """
     Worker function for ProcessPoolExecutor to parse a chunk of C++ files.
     Processing in chunks drastically reduces IPC overhead.
@@ -27,7 +29,7 @@ def _parse_chunk_worker(chunk: list[Tuple[str, str]]) -> list[tuple[str, list, f
     for file_path_str, relative_path_str in chunk:
         try:
             source_code = Path(file_path_str).read_text(encoding="utf-8", errors="replace")
-            parsed_data = parser.parse_source(source_code)
+            parsed_data: list[tuple[str, Set[str]]] = parser.parse_source(source_code)
             mtime = os.path.getmtime(file_path_str)
             results.append((relative_path_str, parsed_data, mtime))
         except Exception as e:
@@ -54,6 +56,7 @@ def _scan_directory(workspace: Path) -> tuple[int, int, int]:
 
     files_to_parse = []
     files_skipped = 0
+    discovered_files: set[str] = set()
 
     # 2. Gather files and diff-check timestamps
     for pattern in CPP_EXTENSIONS:
@@ -61,6 +64,7 @@ def _scan_directory(workspace: Path) -> tuple[int, int, int]:
             try:
                 mtime = os.path.getmtime(file_path)
                 relative_path = str(file_path.relative_to(workspace))
+                discovered_files.add(relative_path)
                 
                 # Check if file is new or modified
                 stored_mtime = services.graph_service.file_mtimes.get(relative_path, -1.0)
@@ -73,6 +77,11 @@ def _scan_directory(workspace: Path) -> tuple[int, int, int]:
             except Exception as e:
                 logger.warning(f"Could not stat file {file_path}: {e}")
                 files_skipped += 1
+
+    removed_files = set(services.graph_service.file_mtimes.keys()) - discovered_files
+    for removed_file in removed_files:
+        services.graph_service.remove_file_nodes(removed_file)
+        services.graph_service.file_mtimes.pop(removed_file, None)
 
     files_parsed = 0
 
