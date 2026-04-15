@@ -430,7 +430,7 @@ def test_scan_directory_incremental_cache_handles_modify_and_delete():
             files_parsed_2, files_skipped_2, node_count_2 = _scan_directory(workspace)
             assert files_parsed_2 == 0
             assert files_skipped_2 == 0
-            assert node_count_2 >= 2
+            assert node_count_2 == node_count_1
 
             a_cpp.write_text("void main() { logger(); }\n", encoding="utf-8")
             new_a_mtime = a_cpp.stat().st_mtime + 2
@@ -441,9 +441,10 @@ def test_scan_directory_incremental_cache_handles_modify_and_delete():
             c_cpp = workspace / "c.cpp"
             c_cpp.write_text("void logger() {}\n", encoding="utf-8")
 
-            files_parsed_3, files_skipped_3, _ = _scan_directory(workspace)
+            files_parsed_3, files_skipped_3, node_count_3 = _scan_directory(workspace)
             assert files_parsed_3 == 2
             assert files_skipped_3 == 0
+            assert node_count_3 == 2
 
             nodes = set(services.graph_service.get_all_nodes())
             assert "main" in nodes

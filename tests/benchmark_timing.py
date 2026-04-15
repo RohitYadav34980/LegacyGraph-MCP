@@ -232,9 +232,9 @@ def _print_comparison(normal: BenchmarkResult, constrained: BenchmarkResult) -> 
 
 if __name__ == "__main__":
     # ── Configuration ──────────────────────────────────────────────
-    local_target = os.environ.get("LEGACYMCP_BENCHMARK_LOCAL_DIR")
-    USE_LOCAL_DIR = bool(local_target)
-    TARGET = local_target or "https://github.com/nlohmann/json"
+    local_dir_path = os.environ.get("LEGACYMCP_BENCHMARK_LOCAL_DIR")
+    USE_LOCAL_DIR = bool(local_dir_path)
+    TARGET = local_dir_path or "https://github.com/nlohmann/json"
 
     # ── Profile 1: normal ──────────────────────────────────────────
     logger.info("=" * 60)
