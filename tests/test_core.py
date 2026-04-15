@@ -1,9 +1,10 @@
 import os
 import tempfile
+from pathlib import Path
 import pytest
 import networkx as nx
 from src.core.parser import CppParser, ParseError
-from src.core.graph import DependencyGraph, GraphError, CircularDependencyError
+from src.core.graph import DependencyGraph
 
 # ==========================================
 # Fixtures
@@ -402,3 +403,53 @@ def test_export_ide_graph_blocked_in_cloud():
 
     # Reset
     config.MCP_MODE = "local"
+
+
+def test_scan_directory_incremental_cache_handles_modify_and_delete():
+    """_scan_directory should reuse cache and drop deleted-file nodes."""
+    from src.utils.helpers import _scan_directory
+    import src.utils.services as services
+
+    original_graph_service = services.graph_service
+    services.graph_service = DependencyGraph()
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            a_cpp = workspace / "a.cpp"
+            b_cpp = workspace / "b.cpp"
+
+            a_cpp.write_text("void main() { helper(); }\n", encoding="utf-8")
+            b_cpp.write_text("void helper() {}\n", encoding="utf-8")
+
+            files_parsed_1, files_skipped_1, node_count_1 = _scan_directory(workspace)
+            assert files_parsed_1 == 2
+            assert files_skipped_1 == 0
+            assert node_count_1 >= 2
+            assert (workspace / ".legacygraph.json").exists()
+
+            files_parsed_2, files_skipped_2, node_count_2 = _scan_directory(workspace)
+            assert files_parsed_2 == 0
+            assert files_skipped_2 == 0
+            assert node_count_2 == node_count_1
+
+            a_cpp.write_text("void main() { logger(); }\n", encoding="utf-8")
+            new_a_mtime = a_cpp.stat().st_mtime + 2
+            os.utime(a_cpp, (new_a_mtime, new_a_mtime))
+
+            b_cpp.unlink()
+
+            c_cpp = workspace / "c.cpp"
+            c_cpp.write_text("void logger() {}\n", encoding="utf-8")
+
+            files_parsed_3, files_skipped_3, node_count_3 = _scan_directory(workspace)
+            assert files_parsed_3 == 2
+            assert files_skipped_3 == 0
+            assert node_count_3 == 2
+
+            nodes = set(services.graph_service.get_all_nodes())
+            assert "main" in nodes
+            assert "logger" in nodes
+            assert "helper" not in nodes
+            assert "b.cpp" not in services.graph_service.file_mtimes
+    finally:
+        services.graph_service = original_graph_service

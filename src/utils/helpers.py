@@ -1,10 +1,13 @@
 import subprocess
 import tempfile
 import shutil
+import os
+import concurrent.futures
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Set, Tuple
 
 from src.core.graph import GraphError
+from src.core.parser import CppParser
 from src.utils.logger import logger
 from src.utils.config import CPP_EXTENSIONS
 import src.utils.services as services
@@ -14,27 +17,129 @@ import src.utils.services as services
 # Internal Helpers
 # ============================================================
 
+def _parse_chunk_worker(
+    chunk: list[Tuple[str, str]],
+) -> list[tuple[str, list[tuple[str, Set[str]]], float]]:
+    """
+    Worker function for ProcessPoolExecutor to parse a chunk of C++ files.
+    Processing in chunks drastically reduces IPC overhead.
+    """
+    results = []
+    parser = CppParser()
+    for file_path_str, relative_path_str in chunk:
+        try:
+            source_code = Path(file_path_str).read_text(encoding="utf-8", errors="replace")
+            parsed_data: list[tuple[str, Set[str]]] = parser.parse_source(source_code)
+            mtime = os.path.getmtime(file_path_str)
+            results.append((relative_path_str, parsed_data, mtime))
+        except Exception as e:
+            logger.warning(f"Error in worker parsing {file_path_str}: {e}")
+            results.append((relative_path_str, [], -1.0))
+    return results
+
+
 def _scan_directory(workspace: Path) -> tuple[int, int, int]:
     """
-    Scan a directory for C++ files, parse each, and populate graph_service.
+    Scan a directory for C++ files, parse them using multi-core processing,
+    and populate graph_service incrementally.
 
     Returns:
         (files_parsed, files_skipped, node_count)
     """
-    files_parsed: int = 0
-    files_skipped: int = 0
+    cache_path = workspace / ".legacygraph.json"
+    
+    # 1. Attempt to load existing cache
+    if services.graph_service.load_cache(str(cache_path)):
+        logger.info("Cache loaded successfully. Performing incremental build.")
+    else:
+        logger.info("No cache found. Performing full build.")
 
+    files_to_parse = []
+    files_skipped = 0
+    discovered_files: set[str] = set()
+
+    # 2. Gather files and diff-check timestamps
     for pattern in CPP_EXTENSIONS:
         for file_path in workspace.rglob(pattern):
             try:
-                source_code = file_path.read_text(encoding="utf-8", errors="replace")
-                parsed_data = services.parser_service.parse_source(source_code)
+                mtime = os.path.getmtime(file_path)
                 relative_path = str(file_path.relative_to(workspace))
-                services.graph_service.build_from_parsed_data(parsed_data, filepath=relative_path)
-                files_parsed += 1
+                discovered_files.add(relative_path)
+                
+                # Check if file is new or modified
+                stored_mtime = services.graph_service.file_mtimes.get(relative_path, -1.0)
+                if mtime > stored_mtime:
+                    # File is modified or new. Drop old nodes if any.
+                    if stored_mtime != -1.0:
+                        services.graph_service.remove_file_nodes(relative_path)
+                    
+                    files_to_parse.append((str(file_path), relative_path))
             except Exception as e:
-                logger.warning(f"Skipping file {file_path}: {e}")
+                logger.warning(f"Could not stat file {file_path}: {e}")
                 files_skipped += 1
+
+    removed_files = set(services.graph_service.file_mtimes.keys()) - discovered_files
+    for removed_file in removed_files:
+        services.graph_service.remove_file_nodes(removed_file)
+        services.graph_service.file_mtimes.pop(removed_file, None)
+
+    files_parsed = 0
+
+    # 3. Parse in parallel using ProcessPoolExecutor
+    if files_to_parse:
+        logger.info(f"Parsing {len(files_to_parse)} files across multiple cores...")
+        
+        # Calculate optimal chunk size to minimize IPC overhead
+        total_cores = os.cpu_count() or 4
+        # LEGACYMCP_MAX_WORKERS lets CI / constrained benchmarks cap parallelism
+        _env_workers = os.environ.get("LEGACYMCP_MAX_WORKERS", "")
+        if _env_workers.isdigit() and int(_env_workers) > 0:
+            num_cores = int(_env_workers)
+        else:
+            # Use 80% of available cores (min 1) to keep the system responsive
+            num_cores = max(1, int(total_cores * 0.8))
+
+        # LEGACYMCP_CHUNK_SIZE overrides the auto-calculated IPC chunk size
+        _env_chunk = os.environ.get("LEGACYMCP_CHUNK_SIZE", "")
+        if _env_chunk.isdigit() and int(_env_chunk) > 0:
+            chunk_size = int(_env_chunk)
+        else:
+            chunk_size = max(1, len(files_to_parse) // (num_cores * 4))
+        
+        # Split into chunks
+        chunks = [
+            files_to_parse[i:i + chunk_size] 
+            for i in range(0, len(files_to_parse), chunk_size)
+        ]
+        
+        total_files = len(files_to_parse)
+        processed_files = 0
+        
+        with concurrent.futures.ProcessPoolExecutor(max_workers=num_cores) as executor:
+            # Map over chunks
+            results_iter = executor.map(_parse_chunk_worker, chunks)
+            
+            for chunk_results in results_iter:
+                for relative_path, parsed_data, mtime in chunk_results:
+                    processed_files += 1
+                    if mtime == -1.0:
+                        files_skipped += 1
+                        continue
+                    
+                    # Add nodes and edges to the global graph
+                    services.graph_service.build_from_parsed_data(parsed_data, filepath=relative_path)
+                    # Update timestamp
+                    services.graph_service.file_mtimes[relative_path] = mtime
+                    files_parsed += 1
+                
+                # Report progress after every chunk completes
+                percent = (processed_files / total_files) * 100
+                logger.info(f"Progress: {processed_files}/{total_files} files processed ({percent:.1f}%)")
+
+        # 4. Save cache after modifying graph
+        services.graph_service.save_cache(str(cache_path))
+    else:
+        logger.info("All files are up-to-date. No parsing needed.")
 
     node_count = len(services.graph_service.get_all_nodes())
     return files_parsed, files_skipped, node_count
