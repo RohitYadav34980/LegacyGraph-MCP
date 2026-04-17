@@ -86,8 +86,10 @@ def main() -> None:
     if transport == "stdio":
         mcp.run(transport="stdio")
     elif transport == "streamable-http":
-        mcp.run(transport="streamable-http")
+        mcp.run(transport="streamable-http", mount_path=args.path)
     else:
+        # SSE fallback (legacy clients)
+        os.environ["FORWARDED_ALLOW_IPS"] = "*"
         mcp.run(transport="sse", mount_path=args.path)
 
 
