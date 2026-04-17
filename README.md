@@ -118,7 +118,7 @@ python -m src --mode local
 #### Cloud Simulation Mode (HTTP / SSE)
 Test the cloud endpoints locally without Docker:
 ```bash
-python -m src --mode cloud --transport sse --path /mcp --port 7860
+python -m src --mode cloud --transport sse --path /mcp --host 127.0.0.1 --port 7860
 ```
 This forces the server to bind to `localhost:7860`, mimicking the Hugging Face Spaces environment.
 
