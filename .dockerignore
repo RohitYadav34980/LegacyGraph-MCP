@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+.env
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Project
+.git/
+.github/
+.vscode/
+.planning/
+.legacygraph.json
+*.pickle
+artifacts/
+scratch/
+
+# Docker/Build
+Dockerfile
+.dockerignore
+dist/
+build/
+*.egg-info/

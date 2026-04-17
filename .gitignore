@@ -149,6 +149,7 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+.planning
 
 # Project specific
 .legacygraph*
