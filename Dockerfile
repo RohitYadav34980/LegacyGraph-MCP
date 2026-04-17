@@ -57,5 +57,5 @@ COPY --chown=user README.md /home/user/app/
 # Expose port (default for HF Spaces)
 EXPOSE 7860
 
-# Default command for cloud mode (SSE transport)
-CMD ["sh", "-c", "exec python -m src --mode cloud --transport sse --port ${PORT:-7860}"]
+# Default command for cloud mode (streamable-http transport)
+CMD ["sh", "-c", "exec python -m src --mode cloud --transport streamable-http --port ${PORT:-7860}"]
