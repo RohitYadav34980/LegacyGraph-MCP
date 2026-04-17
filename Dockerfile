@@ -58,4 +58,4 @@ COPY --chown=user README.md /home/user/app/
 EXPOSE 7860
 
 # Default command for cloud mode (SSE transport)
-CMD ["python", "-m", "src", "--mode", "cloud", "--transport", "sse", "--port", "7860"]
+CMD ["sh", "-c", "exec python -m src --mode cloud --transport sse --port ${PORT:-7860}"]

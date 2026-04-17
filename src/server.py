@@ -55,7 +55,7 @@ mcp = FastMCP(
     website_url="https://github.com/RohitYadav34980/LegacyGraph-MCP",
     # Configure HTTP binding for hosted environments (e.g., Hugging Face, Render).
     host=os.environ.get("MCP_HOST", "0.0.0.0"),
-    port=int(os.environ.get("PORT", "7860")),
+    port=int(os.environ.get("PORT", "8000")),
     streamable_http_path="/mcp",
 )
 
