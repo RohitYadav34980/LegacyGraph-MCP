@@ -1,7 +1,18 @@
+---
+title: GraphPulse
+emoji: 🐺
+colorFrom: indigo
+colorTo: gray
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # LegacyGraph-MCP: Agentic C++ Modernization 🏗️
 
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/)
 [![MCP Protocol](https://img.shields.io/badge/MCP-Enabled-green.svg)](https://modelcontextprotocol.io/)
+![Docker Enabled](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white)
 [![Code Style: Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![smithery badge](https://smithery.ai/badge/labsofuniverse/legacy-mcp-analyzer)](https://smithery.ai/servers/labsofuniverse/legacy-mcp-analyzer)
 
@@ -76,63 +87,108 @@ graph LR
     E -->|cloud| G[HTTP + /tmp/ Clone]
 ```
 
-> 📖 See `ARCHITECTURE.md` for detailed component diagrams.
+> 📖 See [`ARCHITECTURE.md`](ARCHITECTURE.md) for detailed component diagrams.
 
 ---
 
-## 🚀 Quick Start
+## 👨‍💻 Developer Guide (Run & Develop)
 
-### 1. Install
+This section helps developers run the code directly, develop the server, and test it locally.
+
+### 1. Prerequisites and Installation
+Ensure you have Python 3.11+ and `poetry` installed.
+
 ```bash
 git clone https://github.com/RohitYadav34980/LegacyGraph-MCP.git
 cd LegacyGraph-MCP
-pip install poetry && poetry install
+
+# Install dependencies using Poetry
+pip install poetry
+poetry install
 ```
 
-### 2. Run Server
-#### Local (CLI / Claude Desktop)
+### 2. Running the Server Locally
+To develop or verify the MCP server running natively:
+
+#### Standard Local Execution (stdio)
 ```bash
 python -m src --mode local
 ```
-#### Cloud (Smithery / Render)
-```bash
-python -m src --mode cloud
-```
-#### Override Transport (optional)
-```bash
-# Force streamable‑http in local mode
-python -m src --mode local --transport streamable-http
-# Force SSE in cloud mode
-python -m src --mode cloud --transport sse --path /mcp
-```
 
-### 3. Verify Installation
+#### Cloud Simulation Mode (HTTP / SSE)
+Test the cloud endpoints locally without Docker:
 ```bash
-python -m pytest tests/ -v
+python -m src --mode cloud --transport sse --path /mcp --port 7860
+```
+This forces the server to bind to `localhost:7860`, mimicking the Hugging Face Spaces environment.
+
+### 3. Verify Server State
+Test if your local setup works perfectly:
+```bash
+# Run the internal validation script
 python tools/verifier.py
 ```
 Expected output: **100 % accuracy** on dependency detection.
 
 ---
 
+## ☁️ Cloud Deployment (Hugging Face Spaces)
+
+This project is optimized for **Hugging Face Spaces** using the Docker SDK.
+
+### 1. Create a Space
+Create a new Space on [huggingface.co](https://huggingface.co/new-space) and select **Docker** as the SDK.
+
+### 2. Connect & Push
+The easiest way is to push your existing local repository to the Space:
+```bash
+# Add the Hugging Face Space as a remote
+git remote add hf https://huggingface.co/spaces/Rohitadav/GraphPulse
+
+# Push your code (requires an HF Access Token)
+git push hf main --force
+```
+
+### 3. Verify
+Once pushed, the Space will automatically build the `Dockerfile` and start the server on port `7860`. You can then consume this server via **SSE** in any MCP-compatible client.
+
+---
+
 ## 🔌 Installing in Your MCP Client
-### Option 1 – Smithery (recommended)
+
+Connect your AI agent to the Graph engine using these configurations.
+
+### Option 1: Connect via Smithery (For Remote / Cloud)
+If you've deployed to Hugging Face or another remote hosting, or just want to use the published Remote MCP setup, use Smithery. You can [view the server directly on Smithery](https://smithery.ai/servers/labsofuniverse/legacy-mcp-analyzer).
+
 ```bash
 npx -y @smithery/cli@latest mcp add labsofuniverse/legacy-mcp-analyzer --client claude-code
 ```
-### Option 2 – Manual configuration
-Add to `claude_desktop_config.json`:
+
+### Option 2: Local / Claude Desktop Configuration
+If you want to plug your local development environment directly into Claude Desktop, update your configuration file. 
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+
+Add the following configuration, ensuring you **replace the `cwd` paths** with the absolute path where you cloned this repository.
+
 ```json
 {
   "mcpServers": {
     "legacy-mcp-analyzer": {
       "command": "python",
-      "args": ["-m", "src", "--mode", "local"],
-      "cwd": "/path/to/LegacyGraph-MCP"
+      "args": [
+        "-m", 
+        "src", 
+        "--mode", 
+        "local"
+      ],
+      "cwd": "C:\\path\\to\\your\\LegacyGraph-MCP"
     }
   }
 }
 ```
+*Note: Make sure to escape backslashes on Windows (e.g. `C:\\Users\\...`), or use forward slashes on macOS/Linux.*
 
 ---
 
@@ -155,6 +211,7 @@ Add to `claude_desktop_config.json`:
 ```bash
 # Unit + integration tests (≈30 cases)
 python -m pytest tests/ -v
+
 # End‑to‑end verifier against sample legacy project
 python tools/verifier.py
 ```
@@ -163,12 +220,14 @@ python tools/verifier.py
 ---
 
 ## 📚 Documentation
+Review the complete documentation suite for deep-dives into the architecture and usage:
+
 | Document | Description |
 |---|---|
-| `PROJECT_MANUAL.md` | In‑depth guide, API reference, deployment modes |
-| `ARCHITECTURE.md` | Detailed architecture, data flows, component diagrams |
-| `CONTRIBUTING.md` | Development standards, commit protocol, PR process |
-| `CHANGELOG.md` | Version history and release notes |
+| [`PROJECT_MANUAL.md`](PROJECT_MANUAL.md) | In‑depth guide, API reference, deployment modes |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Detailed architecture, data flows, component diagrams |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Development standards, commit protocol, PR process |
+| [`CHANGELOG.md`](CHANGELOG.md) | Version history and release notes |
 
 ---
 
