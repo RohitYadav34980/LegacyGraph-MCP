@@ -1,0 +1,13 @@
+{
+  "project_name": "LegacyGraph-MCP",
+  "version": "0.3.0",
+  "gsd_config": {
+    "auto_commit": true,
+    "require_tests": true,
+    "enforce_standards": true
+  },
+  "deployment": {
+    "target": "huggingface",
+    "port": 7860
+  }
+}
