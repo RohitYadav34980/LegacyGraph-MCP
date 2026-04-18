@@ -246,7 +246,12 @@ Built with:
 - [NetworkX](https://networkx.org/)
 - [MCP](https://modelcontextprotocol.io/)
 - [FastMCP](https://github.com/jlowin/fastmcp)
-
+  
 ---
 
 **Made with ❤️**
+
+<div align="center">
+  <p>Thanks for visiting!</p>
+  <img src="https://visitor-badge.laobi.icu/badge?page_id=RohitYadav34980.LegacyGraph-MCP&" alt="visitors" />
+</div>
