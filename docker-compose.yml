@@ -1,0 +1,30 @@
+services:
+  legacygraph-mcp:
+    build: .
+    image: legacygraph-mcp:latest
+    container_name: legacy-mcp-analyzer
+    environment:
+      - MCP_MODE=${MCP_MODE:-cloud}
+      - PORT=${PORT:-8000}
+      - HF_TOKEN=${HF_TOKEN}
+      # Set HF_BUCKET_URL explicitly — no default to prevent accidental writes.
+      # Example: HF_BUCKET_URL=hf://buckets/YourUser/your-bucket
+      - HF_BUCKET_URL=${HF_BUCKET_URL}
+    ports:
+      - "${PORT:-8000}:${PORT:-8000}"
+    volumes:
+      # Pre-create ./data on the host with correct ownership to avoid
+      # permission errors: `mkdir -p ./data && chown -R 1000:1000 ./data`
+      - ./data:/home/user/app/data
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+    restart: unless-stopped
+    healthcheck:
+      # Use CMD-SHELL so ${PORT} variable is expanded by the shell.
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:${PORT:-8000}/.well-known/mcp/server-card.json')\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

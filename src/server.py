@@ -49,8 +49,8 @@ mcp = FastMCP(
     name="legacy-mcp-analyzer",
     instructions=(
         "LegacyGraph-MCP exposes a parsed C++ call graph over MCP. "
-        "Use analyze_codebase to ingest code (via repo_url, raw_files, "
-        "or directory_path), then query the graph with the other tools."
+        "1. Use analyze_codebase to ingest code and get a project_id. "
+        "2. Pass the project_id to other tools to query that specific graph."
     ),
     website_url="https://github.com/RohitYadav34980/LegacyGraph-MCP",
     # Configure HTTP binding for hosted environments (e.g., Hugging Face, Render).
@@ -108,31 +108,31 @@ async def server_card(_: object) -> "JSONResponse":
         },
         {
             "name": "get_file_functions",
-            "description": "List all functions defined in a specific source file.",
+            "description": "List all functions in a file. Requires project_id for isolation.",
         },
         {
             "name": "get_file_coupling",
-            "description": "Cross-file coupling report showing inter-file dependencies.",
+            "description": "Cross-file coupling report. Requires project_id for isolation.",
         },
         {
             "name": "get_callers",
-            "description": "List upstream functions that call the given function.",
+            "description": "List upstream callers. Requires project_id for isolation.",
         },
         {
             "name": "get_callees",
-            "description": "List downstream functions called by the given function.",
+            "description": "List downstream callees. Requires project_id for isolation.",
         },
         {
             "name": "detect_cycles",
-            "description": "Detect circular dependencies in the call graph.",
+            "description": "Detect circular dependencies. Requires project_id for isolation.",
         },
         {
             "name": "get_orphan_functions",
-            "description": "Identify functions that are defined but never called.",
+            "description": "List uncalled functions. Requires project_id for isolation.",
         },
         {
             "name": "generate_mermaid_graph",
-            "description": "Return a Mermaid.js diagram as an inline markdown string.",
+            "description": "Generate inline Mermaid diagram. Requires project_id for isolation.",
         },
     ]
 
@@ -149,7 +149,7 @@ async def server_card(_: object) -> "JSONResponse":
         {
             "serverInfo": {
                 "name": "legacy-mcp-analyzer",
-                "version": "0.3.0",
+                "version": "0.4.0",
             },
             "capabilities": {
                 "modes": ["local", "cloud"],
@@ -160,3 +160,9 @@ async def server_card(_: object) -> "JSONResponse":
             "prompts": [],
         }
     )
+
+# HF Spaces Ping Route
+@mcp.custom_route("/", methods=["GET"])
+async def root_ping(_: object) -> "JSONResponse":
+    from starlette.responses import JSONResponse
+    return JSONResponse({"status": "healthy", "service": "LegacyGraph-MCP Cloud Node"})

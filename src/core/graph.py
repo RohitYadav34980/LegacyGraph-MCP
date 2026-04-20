@@ -2,7 +2,7 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import networkx as nx  # type: ignore
 
@@ -29,6 +29,7 @@ class DependencyGraph:
         """Initialize an empty directed graph."""
         self.graph = nx.DiGraph()
         self.file_mtimes: Dict[str, float] = {}
+        self.vcs_hash: Optional[str] = None
 
     def remove_file_nodes(self, filepath: str) -> None:
         """Removes all nodes associated with a specific file."""
@@ -54,6 +55,7 @@ class DependencyGraph:
                 ],
                 "edges": list(self.graph.edges()),
                 "file_mtimes": self.file_mtimes,
+                "vcs_hash": self.vcs_hash,
             }
             flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
             if hasattr(os, "O_NOFOLLOW"):
@@ -90,6 +92,7 @@ class DependencyGraph:
 
             self.graph = g
             self.file_mtimes = data.get("file_mtimes", {})
+            self.vcs_hash = data.get("vcs_hash")
             logger.info(f"Loaded graph cache from {cache_path}")
             return True
         except Exception as e:

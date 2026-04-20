@@ -153,3 +153,5 @@ Thumbs.db
 
 # Project specific
 .legacygraph*
+.legacygraph_cache/
+data/cache/

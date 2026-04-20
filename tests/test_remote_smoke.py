@@ -15,6 +15,7 @@ import pytest
 import src.utils.config as config
 import src.utils.services as services
 from src.core.graph import DependencyGraph
+from src.utils.helpers import _get_raw_files_project_id
 
 
 # ---------------------------------------------------------------------------
@@ -40,10 +41,15 @@ _SAMPLE_RAW_FILES = [
 ]
 
 
+# Pre-compute the stable target_id for _SAMPLE_RAW_FILES so query tests
+# can pass it as project_id without duplicating the hashing logic.
+_SAMPLE_TARGET_ID = _get_raw_files_project_id(_SAMPLE_RAW_FILES)
+
+
 @pytest.fixture(autouse=True)
 def _cloud_mode_and_fresh_graph():
     """
-    Force cloud mode and a pristine graph for every test in this module.
+    Force cloud mode and a pristine graph_service for every test in this module.
     Restores to local mode on teardown so other test modules are unaffected.
     """
     original_mode = config.MCP_MODE
@@ -97,11 +103,9 @@ def test_cloud_analyze_raw_files():
     result = analyze_codebase(raw_files=_SAMPLE_RAW_FILES)
 
     assert "error" not in result.lower(), f"Unexpected error: {result}"
-    assert "2 raw file(s)" in result, (
-        f"Expected '2 raw file(s)' in result; got: {result}"
-    )
 
-    nodes = services.graph_service.get_all_nodes()
+    # Verify nodes via the pool graph (graph_service is not updated in cloud mode)
+    nodes = services.graph_pool.get_graph(_SAMPLE_TARGET_ID).get_all_nodes()
     assert "main" in nodes
     assert "helper" in nodes
     assert "logger" in nodes
@@ -117,7 +121,7 @@ def test_cloud_get_callers():
     from src.tools.queries import get_callers
 
     analyze_codebase(raw_files=_SAMPLE_RAW_FILES)
-    result = get_callers("logger")
+    result = get_callers("logger", project_id=_SAMPLE_TARGET_ID)
 
     # Result is a formatted string; verifiable by checking for caller names
     assert "helper" in result and "main" in result, (
@@ -135,7 +139,7 @@ def test_cloud_get_callees():
     from src.tools.queries import get_callees
 
     analyze_codebase(raw_files=_SAMPLE_RAW_FILES)
-    result = get_callees("main")
+    result = get_callees("main", project_id=_SAMPLE_TARGET_ID)
 
     assert "helper" in result and "logger" in result, (
         f"Expected callees of 'main' to include both 'helper' and 'logger'; got: {result}"

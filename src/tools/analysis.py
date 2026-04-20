@@ -2,13 +2,22 @@
 
 from typing import Dict, List, Optional
 from pathlib import Path
+import os
 import shutil
 
 from src.core.graph import DependencyGraph, GraphError
 from src.utils.logger import logger
 import src.utils.config as config
 import src.utils.services as services
-from src.utils.helpers import _scan_directory, _clone_repo, _apply_patch
+from src.utils.helpers import (
+    _scan_directory, 
+    _clone_repo, 
+    _apply_patch, 
+    _get_project_id, 
+    _get_raw_files_project_id,
+    _get_remote_hash,
+    _sync_to_hf_bucket
+)
 
 
 def analyze_codebase(
@@ -66,32 +75,88 @@ def analyze_codebase(
             "Use repo_url or raw_files instead."
         )
 
-    # Reset graph for a fresh analysis
-    services.graph_service = DependencyGraph()
+    # ---- Mode-Aware Logic -----------------------------------------
+    
+    # 1. Determine Project ID and Cache Path
+    target_id = ""
+    if repo_url:
+        target_id = _get_project_id(repo_url)
+    elif directory_path:
+        target_id = _get_project_id(directory_path)
+    else:
+        # For raw_files, we use a session-based or content-based ID
+        assert raw_files is not None
+        target_id = _get_raw_files_project_id(raw_files)
+
+    cache_path = None
+    if config.MCP_MODE == "cloud":
+        os.makedirs(config.LEGACYGRAPH_CACHE_ROOT, exist_ok=True)
+        cache_path = os.path.join(config.LEGACYGRAPH_CACHE_ROOT, f"{target_id}.json")
+    else:
+        # In local mode, we default to the directory's own cache if possible
+        if directory_path:
+            cache_path = os.path.join(directory_path, ".legacygraph.json")
+
+    # 2. Activate Graph in Pool
+    graph = services.graph_pool.get_graph(target_id)
+    
+    logger.info(f"Codebase analysis initiated. Target mapped to Project ID: {target_id}")
 
     # ---- Workflow 1: Clone a repo ---------------------------------
     if repo_url is not None:
+        # Check Remote Hash First (Optimization)
+        current_hash = _get_remote_hash(repo_url)
+        if current_hash and graph.vcs_hash == current_hash:
+            return (
+                f"Project '{repo_url}' is up-to-date in cache. "
+                f"Project ID: {target_id}. Ready for queries."
+            )
+
         clone_dir: Optional[Path] = None
         try:
             clone_dir = _clone_repo(repo_url)
+            
+            # Cloud Guard: File Count
+            total_files = sum(
+                1 for f in clone_dir.rglob("*") 
+                if f.is_file() and ".git" not in f.parts
+            )
+            if config.MCP_MODE == "cloud" and total_files > 2000:
+                shutil.rmtree(clone_dir, ignore_errors=True)
+                return (
+                    f"### Error: Codebase Too Large\n\n"
+                    f"Cloud mode is restricted to 2,000 files for performance. "
+                    f"'{repo_url}' has ~{total_files} files.\n\n"
+                    f"**Please Setup Locally:**\n"
+                    f"1. `git clone https://github.com/RohitYadav34980/LegacyGraph-MCP`\n"
+                    f"2. `cd LegacyGraph-MCP && poetry install`\n"
+                    f"3. `poetry run python -m src --mode local`"
+                )
 
             if patch_content:
                 _apply_patch(clone_dir, patch_content)
 
-            files_parsed, files_skipped, node_count = _scan_directory(clone_dir)
+            files_parsed, files_skipped, node_count = _scan_directory(
+                clone_dir, cache_path=cache_path, graph=graph
+            )
+            
+            if current_hash:
+                graph.vcs_hash = current_hash
 
             msg = (
-                f"Successfully cloned and analyzed '{repo_url}'. "
-                f"Parsed {files_parsed} file(s), tracking {node_count} function(s)."
+                f"Successfully analyzed '{repo_url}'. "
+                f"Project ID: {target_id}. "
+                f"Parsed {files_parsed} file(s), tracking {node_count} functions."
             )
-            if files_skipped > 0:
-                msg += f" ({files_skipped} file(s) skipped due to read errors.)"
-            if patch_content:
-                msg += " Patch applied successfully."
+            logger.info(f"Analysis complete for {target_id}. Parsed {files_parsed} files, {node_count} nodes.")
+
+            
+            # Cloud Sync
+            if config.MCP_MODE == "cloud":
+                _sync_to_hf_bucket()
+
             return msg
 
-        except RuntimeError as e:
-            return f"Error: {str(e)}"
         except Exception as e:
             return f"Error during repo analysis: {str(e)}"
         finally:
@@ -100,33 +165,44 @@ def analyze_codebase(
 
     # ---- Workflow 2: Raw file objects ------------------------------
     if raw_files is not None:
-        if not raw_files:
-            return "Error: raw_files list is empty."
+        # ── Cache-hit check ───────────────────────────────────────────────────
+        # get_graph() already loaded the cache from disk on first access.
+        # If the graph already has nodes, the content hasn't changed (same
+        # content hash → same target_id) so we skip expensive re-parsing.
+        existing_nodes = graph.get_all_nodes()
+        if existing_nodes:
+            node_count = len(existing_nodes)
+            logger.info(
+                f"Raw files cache hit for {target_id}. "
+                f"Skipping re-parse. Tracking {node_count} functions."
+            )
+            return (
+                f"Project '{target_id}' loaded from cache. "
+                f"Tracking {node_count} functions. Ready for queries."
+            )
 
+        # ── Full parse (cache miss) ───────────────────────────────────────────
         files_parsed = 0
-        files_skipped = 0
         for entry in raw_files:
             filename = entry.get("filename", "")
             content = entry.get("content", "")
-            if not filename or not content:
-                files_skipped += 1
-                continue
+            if not filename or not content: continue
             try:
                 parsed_data = services.parser_service.parse_source(content)
-                services.graph_service.build_from_parsed_data(parsed_data, filepath=filename)
+                graph.build_from_parsed_data(parsed_data, filepath=filename)
                 files_parsed += 1
             except Exception as e:
                 logger.warning(f"Skipping raw file '{filename}': {e}")
-                files_skipped += 1
 
-        node_count = len(services.graph_service.get_all_nodes())
-        msg = (
-            f"Successfully analyzed {files_parsed} raw file(s), "
-            f"tracking {node_count} function(s)."
-        )
-        if files_skipped > 0:
-            msg += f" ({files_skipped} file(s) skipped.)"
-        return msg
+        # Save cache for raw files too if in cloud
+        if cache_path:
+            graph.save_cache(cache_path)
+            if config.MCP_MODE == "cloud":
+                _sync_to_hf_bucket()
+
+        node_count = len(graph.get_all_nodes())
+        logger.info(f"Raw files analysis complete for {target_id}. Parsed {files_parsed} files.")
+        return f"Analyzed {files_parsed} raw files. Project ID: {target_id}."
 
     # ---- Workflow 3: Local directory scan --------------------------
     if directory_path is not None:
@@ -135,15 +211,13 @@ def analyze_codebase(
             return f"Error: Directory '{directory_path}' does not exist."
         if not workspace.is_dir():
             return f"Error: '{directory_path}' is not a directory."
-
-        files_parsed, files_skipped, node_count = _scan_directory(workspace)
-
-        msg = (
-            f"Successfully analyzed workspace '{directory_path}'. "
-            f"Parsed {files_parsed} file(s), tracking {node_count} function(s)."
+        files_parsed, files_skipped, node_count = _scan_directory(
+            workspace, cache_path=cache_path, graph=graph
         )
-        if files_skipped > 0:
-            msg += f" ({files_skipped} file(s) skipped due to read errors.)"
-        return msg
+        logger.info(f"Local workspace analysis complete for {target_id}. Parsed {files_parsed} files.")
+        return (
+            f"Analyzed local workspace '{directory_path}'. "
+            f"Project ID: {target_id}. Tracking {node_count} functions."
+        )
 
     return "Error: No valid input pathway matched."

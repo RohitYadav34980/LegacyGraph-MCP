@@ -5,12 +5,14 @@ from pathlib import Path
 
 from src.core.graph import GraphError
 import src.utils.config as config
+import src.utils.services as services
 from src.utils.helpers import _build_mermaid_string
 
 
 def generate_mermaid_graph(
     focus_node: Optional[str] = None,
     max_depth: int = 2,
+    project_id: Optional[str] = None,
 ) -> str:
     """
     Generate a Mermaid.js dependency diagram and return it as a markdown string.
@@ -26,7 +28,8 @@ def generate_mermaid_graph(
         A Mermaid-fenced markdown string for inline rendering.
     """
     try:
-        return _build_mermaid_string(focus_node=focus_node, max_depth=max_depth)
+        graph = services.graph_pool.get_graph(project_id)
+        return _build_mermaid_string(graph, focus_node=focus_node, max_depth=max_depth)
     except GraphError as e:
         return f"Error: {str(e)}"
     except Exception as e:
@@ -37,6 +40,7 @@ def export_ide_graph(
     output_filename: str,
     focus_node: Optional[str] = None,
     max_depth: int = 2,
+    project_id: Optional[str] = None,
 ) -> str:
     """
     Save the dependency graph as a Mermaid.js diagram to a local .md file.
@@ -59,7 +63,8 @@ def export_ide_graph(
         )
 
     try:
-        content = _build_mermaid_string(focus_node=focus_node, max_depth=max_depth)
+        graph = services.graph_pool.get_graph(project_id)
+        content = _build_mermaid_string(graph, focus_node=focus_node, max_depth=max_depth)
 
         output_path = Path(output_filename)
         output_path.parent.mkdir(parents=True, exist_ok=True)
