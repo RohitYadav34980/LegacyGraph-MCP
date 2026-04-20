@@ -2,10 +2,11 @@ name: GitHub Clone Count Update Everyday
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  GH_TOKEN: ${{ secrets.SECRET_TOKEN }}
 
 on:
   schedule:
-    - cron: "0 * * * *"
+    - cron: "0 0 * * *"
   workflow_dispatch:
 
 jobs:
@@ -14,9 +15,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      
-      - name: gh login
-        run: echo "${{ secrets.SECRET_TOKEN }}" | gh auth login --with-token
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
 
       - name: parse latest clone count
         run: |
