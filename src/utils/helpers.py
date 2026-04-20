@@ -11,6 +11,8 @@ from src.core.parser import CppParser
 from src.utils.logger import logger
 from src.utils.config import CPP_EXTENSIONS
 import src.utils.services as services
+import hashlib
+import src.utils.config as config
 
 
 # ============================================================
@@ -38,19 +40,29 @@ def _parse_chunk_worker(
     return results
 
 
-def _scan_directory(workspace: Path) -> tuple[int, int, int]:
+def _scan_directory(workspace: Path, cache_path: Optional[str] = None, graph: Optional["DependencyGraph"] = None) -> tuple[int, int, int]:
     """
     Scan a directory for C++ files, parse them using multi-core processing,
-    and populate graph_service incrementally.
+    and populate the given graph incrementally.
+
+    Args:
+        workspace: Path to the directory to scan.
+        cache_path: Explicit path to the JSON cache file. If None, uses workspace/.legacygraph.json.
+        graph: The DependencyGraph instance to operate on. Defaults to the pool's default graph.
 
     Returns:
         (files_parsed, files_skipped, node_count)
     """
-    cache_path = workspace / ".legacygraph.json"
-    
+    if cache_path is None:
+        cache_path = str(workspace / ".legacygraph.json")
+
+    # Use the provided graph or fall back to the pool's default — always the SAME instance
+    if graph is None:
+        graph = services.graph_pool.get_graph()
+
     # 1. Attempt to load existing cache
-    if services.graph_service.load_cache(str(cache_path)):
-        logger.info("Cache loaded successfully. Performing incremental build.")
+    if graph.load_cache(cache_path):
+        logger.info(f"Cache loaded from {cache_path}. Performing incremental build.")
     else:
         logger.info("No cache found. Performing full build.")
 
@@ -65,30 +77,30 @@ def _scan_directory(workspace: Path) -> tuple[int, int, int]:
                 mtime = os.path.getmtime(file_path)
                 relative_path = str(file_path.relative_to(workspace))
                 discovered_files.add(relative_path)
-                
+
                 # Check if file is new or modified
-                stored_mtime = services.graph_service.file_mtimes.get(relative_path, -1.0)
+                stored_mtime = graph.file_mtimes.get(relative_path, -1.0)
                 if mtime > stored_mtime:
                     # File is modified or new. Drop old nodes if any.
                     if stored_mtime != -1.0:
-                        services.graph_service.remove_file_nodes(relative_path)
-                    
+                        graph.remove_file_nodes(relative_path)
+
                     files_to_parse.append((str(file_path), relative_path))
             except Exception as e:
                 logger.warning(f"Could not stat file {file_path}: {e}")
                 files_skipped += 1
 
-    removed_files = set(services.graph_service.file_mtimes.keys()) - discovered_files
+    removed_files = set(graph.file_mtimes.keys()) - discovered_files
     for removed_file in removed_files:
-        services.graph_service.remove_file_nodes(removed_file)
-        services.graph_service.file_mtimes.pop(removed_file, None)
+        graph.remove_file_nodes(removed_file)
+        graph.file_mtimes.pop(removed_file, None)
 
     files_parsed = 0
 
     # 3. Parse in parallel using ProcessPoolExecutor
     if files_to_parse:
         logger.info(f"Parsing {len(files_to_parse)} files across multiple cores...")
-        
+
         # Calculate optimal chunk size to minimize IPC overhead
         total_cores = os.cpu_count() or 4
         # LEGACYMCP_MAX_WORKERS lets CI / constrained benchmarks cap parallelism
@@ -105,43 +117,43 @@ def _scan_directory(workspace: Path) -> tuple[int, int, int]:
             chunk_size = int(_env_chunk)
         else:
             chunk_size = max(1, len(files_to_parse) // (num_cores * 4))
-        
+
         # Split into chunks
         chunks = [
-            files_to_parse[i:i + chunk_size] 
+            files_to_parse[i:i + chunk_size]
             for i in range(0, len(files_to_parse), chunk_size)
         ]
-        
+
         total_files = len(files_to_parse)
         processed_files = 0
-        
+
         with concurrent.futures.ProcessPoolExecutor(max_workers=num_cores) as executor:
             # Map over chunks
             results_iter = executor.map(_parse_chunk_worker, chunks)
-            
+
             for chunk_results in results_iter:
                 for relative_path, parsed_data, mtime in chunk_results:
                     processed_files += 1
                     if mtime == -1.0:
                         files_skipped += 1
                         continue
-                    
-                    # Add nodes and edges to the global graph
-                    services.graph_service.build_from_parsed_data(parsed_data, filepath=relative_path)
+
+                    # Add nodes and edges to the graph instance
+                    graph.build_from_parsed_data(parsed_data, filepath=relative_path)
                     # Update timestamp
-                    services.graph_service.file_mtimes[relative_path] = mtime
+                    graph.file_mtimes[relative_path] = mtime
                     files_parsed += 1
-                
+
                 # Report progress after every chunk completes
                 percent = (processed_files / total_files) * 100
                 logger.info(f"Progress: {processed_files}/{total_files} files processed ({percent:.1f}%)")
 
         # 4. Save cache after modifying graph
-        services.graph_service.save_cache(str(cache_path))
+        graph.save_cache(cache_path)
     else:
         logger.info("All files are up-to-date. No parsing needed.")
 
-    node_count = len(services.graph_service.get_all_nodes())
+    node_count = len(graph.get_all_nodes())
     return files_parsed, files_skipped, node_count
 
 
@@ -195,11 +207,12 @@ def _apply_patch(repo_dir: Path, patch_content: str) -> None:
 
 
 def _build_mermaid_string(
+    graph: "DependencyGraph",
     focus_node: Optional[str] = None,
     max_depth: int = 2,
 ) -> str:
     """
-    Build a Mermaid.js graph string from graph_service.
+    Build a Mermaid.js graph string from a specific graph instance.
 
     Returns:
         The Mermaid markdown string (including fences).
@@ -207,13 +220,13 @@ def _build_mermaid_string(
     Raises:
         GraphError: If the graph is empty or focus_node is missing.
     """
-    all_nodes = services.graph_service.get_all_nodes()
+    all_nodes = graph.get_all_nodes()
     if not all_nodes:
         raise GraphError("Graph is empty. Run analyze_codebase first.")
 
     # Determine which nodes to include
     if focus_node is not None:
-        if focus_node not in services.graph_service.graph:
+        if focus_node not in graph.graph:
             raise GraphError(f"Function '{focus_node}' not found in graph.")
         # BFS to collect neighbourhood
         visited: set[str] = set()
@@ -223,8 +236,8 @@ def _build_mermaid_string(
             for node in frontier:
                 if node not in visited:
                     visited.add(node)
-                    next_frontier.extend(services.graph_service.graph.successors(node))
-                    next_frontier.extend(services.graph_service.graph.predecessors(node))
+                    next_frontier.extend(graph.graph.successors(node))
+                    next_frontier.extend(graph.graph.predecessors(node))
             frontier = next_frontier
         included_nodes = visited
     else:
@@ -234,7 +247,7 @@ def _build_mermaid_string(
     mermaid_lines: list[str] = ["```mermaid", "graph TD;"]
     edges_added: set[tuple[str, str]] = set()
 
-    for caller, callee in services.graph_service.graph.edges():
+    for caller, callee in graph.graph.edges():
         if caller in included_nodes and callee in included_nodes:
             if (caller, callee) not in edges_added:
                 safe_caller = caller.replace(":", "_")
@@ -251,3 +264,59 @@ def _build_mermaid_string(
 
     mermaid_lines.append("```")
     return "\n".join(mermaid_lines)
+
+
+def _get_project_id(target: str) -> str:
+    """Generates a stable 8-character hash for a project target (URL or Path)."""
+    return hashlib.sha256(target.encode()).hexdigest()[:8]
+
+
+def _get_remote_hash(repo_url: str) -> Optional[str]:
+    """Fetches the latest commit hash from a remote git repository."""
+    try:
+        result = subprocess.run(
+            ["git", "ls-remote", repo_url, "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        if result.stdout:
+            return result.stdout.split()[0]
+    except Exception as e:
+        logger.warning(f"Failed to fetch remote hash for {repo_url}: {e}")
+    return None
+
+
+def _sync_to_hf_bucket() -> bool:
+    """
+    Executes 'huggingface-cli' sync to push local cache data to the HF bucket.
+    Only active in cloud mode when HF_BUCKET_URL is configured.
+    """
+    if config.MCP_MODE != "cloud":
+        return False
+
+    if not config.HF_BUCKET_URL:
+        logger.warning("HF_BUCKET_URL is not set. Skipping HF sync. Set the env var to enable persistence.")
+        return False
+
+    try:
+        logger.info(f"Syncing {config.LEGACYGRAPH_CACHE_ROOT} to {config.HF_BUCKET_URL}...")
+        subprocess.run(
+            ["huggingface-cli", "upload-large-folder",
+             config.HF_BUCKET_URL, config.LEGACYGRAPH_CACHE_ROOT,
+             "--repo-type", "dataset"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+        logger.info("HF Sync completed successfully.")
+        return True
+    except subprocess.CalledProcessError as e:
+        logger.error(f"HF Sync failed: {e.stderr.strip()}")
+    except FileNotFoundError:
+        logger.warning("'huggingface-cli' not found. Skipping sync. Please install huggingface_hub[cli].")
+    except Exception as e:
+        logger.error(f"Unexpected error during HF Sync: {e}")
+    return False
