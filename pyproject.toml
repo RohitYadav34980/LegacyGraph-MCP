@@ -15,6 +15,7 @@ networkx = "^3.2.1"
 gitpython = "^3.1.0"
 uvicorn = "^0.41.0"
 starlette = "^0.52.1"
+huggingface-hub = {version = "^0.28.0", extras = ["cli"]}
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"

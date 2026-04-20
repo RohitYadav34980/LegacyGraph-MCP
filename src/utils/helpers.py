@@ -290,8 +290,8 @@ def _get_remote_hash(repo_url: str) -> Optional[str]:
 
 def _sync_to_hf_bucket() -> bool:
     """
-    Executes 'huggingface-cli' sync to push local cache data to the HF bucket.
-    Only active in cloud mode when HF_BUCKET_URL is configured.
+    Synchronizes the local cache directory to the configured Hugging Face bucket.
+    Uses the huggingface_hub Python library for reliability.
     """
     if config.MCP_MODE != "cloud":
         return False
@@ -301,22 +301,35 @@ def _sync_to_hf_bucket() -> bool:
         return False
 
     try:
-        logger.info(f"Syncing {config.LEGACYGRAPH_CACHE_ROOT} to {config.HF_BUCKET_URL}...")
-        subprocess.run(
-            ["huggingface-cli", "upload-large-folder",
-             config.HF_BUCKET_URL, config.LEGACYGRAPH_CACHE_ROOT,
-             "--repo-type", "dataset"],
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=180,
+        from huggingface_hub import HfApi
+        
+        # Parse hf://[type]/[namespace]/[repo]
+        # Example: hf://datasets/Rohitadav/GraphPulse-storage
+        url = config.HF_BUCKET_URL.replace("hf://", "")
+        parts = url.split("/")
+        
+        repo_type = "dataset"
+        if parts[0] in ["datasets", "models", "spaces"]:
+            repo_type = parts[0].rstrip("s") # "datasets" -> "dataset"
+            repo_id = "/".join(parts[1:])
+        else:
+            repo_id = "/".join(parts)
+
+        logger.info(f"Syncing {config.LEGACYGRAPH_CACHE_ROOT} to {repo_type} '{repo_id}' using HfApi...")
+        
+        api = HfApi()
+        api.upload_folder(
+            folder_path=config.LEGACYGRAPH_CACHE_ROOT,
+            repo_id=repo_id,
+            repo_type=repo_type,
+            token=os.environ.get("HF_TOKEN"),
         )
+        
         logger.info("HF Sync completed successfully.")
         return True
-    except subprocess.CalledProcessError as e:
-        logger.error(f"HF Sync failed: {e.stderr.strip()}")
-    except FileNotFoundError:
-        logger.warning("'huggingface-cli' not found. Skipping sync. Please install huggingface_hub[cli].")
+        
+    except ImportError:
+        logger.warning("huggingface_hub library not found. Skipping sync. Please `pip install huggingface_hub`.")
     except Exception as e:
-        logger.error(f"Unexpected error during HF Sync: {e}")
+        logger.error(f"HF Sync failed with error: {e}")
     return False

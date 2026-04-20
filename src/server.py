@@ -160,3 +160,9 @@ async def server_card(_: object) -> "JSONResponse":
             "prompts": [],
         }
     )
+
+# HF Spaces Ping Route
+@mcp.custom_route("/", methods=["GET"])
+async def root_ping(_: object) -> "JSONResponse":
+    from starlette.responses import JSONResponse
+    return JSONResponse({"status": "healthy", "service": "LegacyGraph-MCP Cloud Node"})

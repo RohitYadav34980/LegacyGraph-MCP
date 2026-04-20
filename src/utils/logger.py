@@ -36,7 +36,7 @@ logger.addHandler(console_handler)
 
 # Apply this clean format to Uvicorn and FastMCP so HTTP hits are clean 
 # but still visible, as requested by the user.
-for foreign_logger_name in ["uvicorn.access", "uvicorn.error", "mcp.server.lowlevel.server", "mcp.server.streamable_http_manager"]:
+for foreign_logger_name in ["uvicorn.access", "mcp.server.lowlevel.server", "mcp.server.streamable_http_manager"]:
     fl = logging.getLogger(foreign_logger_name)
     fl.setLevel(logging.INFO) # Keep them visible
     if fl.hasHandlers():
