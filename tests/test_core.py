@@ -275,8 +275,8 @@ def test_file_subgraph_empty(graph):
 # --- Case L: analyze_codebase with raw_files ---
 def test_analyze_codebase_raw_files():
     """analyze_codebase should accept raw_files and build the graph."""
-    import hashlib
     from src.tools.analysis import analyze_codebase
+    from src.utils.helpers import _get_raw_files_project_id
     import src.utils.services as services
 
     raw = [
@@ -289,14 +289,8 @@ def test_analyze_codebase_raw_files():
     # "2" appears either in "Analyzed 2 raw files" (cache miss) or "Tracking 2 functions" (cache hit)
     assert "2" in result
 
-    # Compute deterministic target_id to look up the pool graph
-    sorted_files = sorted(raw, key=lambda f: f.get("filename", ""))
-    normalized = "".join(
-        f"{f.get('filename', '')}:{f.get('content', '')}" for f in sorted_files
-    )
-    content_hash = hashlib.sha256(normalized.encode()).hexdigest()[:12]
-    target_id = f"raw_{content_hash}"
-
+    # Look up the pool graph using the same deterministic target_id
+    target_id = _get_raw_files_project_id(raw)
     nodes = services.graph_pool.get_graph(target_id).get_all_nodes()
     assert "main" in nodes
     assert "helper" in nodes

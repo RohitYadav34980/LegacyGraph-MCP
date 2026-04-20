@@ -4,7 +4,7 @@ import shutil
 import os
 import concurrent.futures
 from pathlib import Path
-from typing import Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from src.core.graph import GraphError
 from src.core.parser import CppParser
@@ -269,6 +269,16 @@ def _build_mermaid_string(
 def _get_project_id(target: str) -> str:
     """Generates a stable 8-character hash for a project target (URL or Path)."""
     return hashlib.sha256(target.encode()).hexdigest()[:8]
+
+
+def _get_raw_files_project_id(raw_files: List[Dict[str, str]]) -> str:
+    """Generates a stable content-based project ID for a raw_files list."""
+    sorted_files = sorted(raw_files, key=lambda f: f.get("filename", ""))
+    normalized = "".join(
+        f"{f.get('filename', '')}:{f.get('content', '')}" for f in sorted_files
+    )
+    content_hash = hashlib.sha256(normalized.encode()).hexdigest()[:12]
+    return f"raw_{content_hash}"
 
 
 def _get_remote_hash(repo_url: str) -> Optional[str]:

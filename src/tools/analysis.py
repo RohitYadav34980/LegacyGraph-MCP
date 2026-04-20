@@ -14,6 +14,7 @@ from src.utils.helpers import (
     _clone_repo, 
     _apply_patch, 
     _get_project_id, 
+    _get_raw_files_project_id,
     _get_remote_hash,
     _sync_to_hf_bucket
 )
@@ -74,8 +75,6 @@ def analyze_codebase(
             "Use repo_url or raw_files instead."
         )
 
-    import hashlib
-
     # ---- Mode-Aware Logic -----------------------------------------
     
     # 1. Determine Project ID and Cache Path
@@ -86,14 +85,8 @@ def analyze_codebase(
         target_id = _get_project_id(directory_path)
     else:
         # For raw_files, we use a session-based or content-based ID
-        # Sort by filename for deterministic hashing
         assert raw_files is not None
-        sorted_files = sorted(raw_files, key=lambda f: f.get("filename", ""))
-        normalized = "".join(
-            f"{f.get('filename', '')}:{f.get('content', '')}" for f in sorted_files
-        )
-        content_hash = hashlib.sha256(normalized.encode()).hexdigest()[:12]
-        target_id = f"raw_{content_hash}"
+        target_id = _get_raw_files_project_id(raw_files)
 
     cache_path = None
     if config.MCP_MODE == "cloud":

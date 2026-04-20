@@ -10,12 +10,12 @@ These tests validate the full cloud execution path:
 All tests are self-contained — no git clones, no filesystem side effects.
 """
 
-import hashlib
 import pytest
 
 import src.utils.config as config
 import src.utils.services as services
 from src.core.graph import DependencyGraph
+from src.utils.helpers import _get_raw_files_project_id
 
 
 # ---------------------------------------------------------------------------
@@ -41,19 +41,9 @@ _SAMPLE_RAW_FILES = [
 ]
 
 
-def _compute_raw_target_id(raw_files: list) -> str:
-    """Computes the deterministic project ID for a raw_files list."""
-    sorted_files = sorted(raw_files, key=lambda f: f.get("filename", ""))
-    normalized = "".join(
-        f"{f.get('filename', '')}:{f.get('content', '')}" for f in sorted_files
-    )
-    content_hash = hashlib.sha256(normalized.encode()).hexdigest()[:12]
-    return f"raw_{content_hash}"
-
-
 # Pre-compute the stable target_id for _SAMPLE_RAW_FILES so query tests
 # can pass it as project_id without duplicating the hashing logic.
-_SAMPLE_TARGET_ID = _compute_raw_target_id(_SAMPLE_RAW_FILES)
+_SAMPLE_TARGET_ID = _get_raw_files_project_id(_SAMPLE_RAW_FILES)
 
 
 @pytest.fixture(autouse=True)

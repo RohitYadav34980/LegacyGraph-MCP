@@ -60,10 +60,13 @@ class GraphPool:
         """
         safe = re.sub(r"[^a-zA-Z0-9_\-]", "", project_id)
         if not safe:
-            raise ValueError(f"Invalid project_id '{project_id}': must contain alphanumeric characters.")
+            raise ValueError(
+                "Invalid project_id: must contain alphanumeric characters, "
+                "hyphens, or underscores."
+            )
         if safe != project_id:
             raise ValueError(
-                f"Invalid project_id '{project_id}': contains disallowed characters. "
+                "Invalid project_id: contains disallowed characters. "
                 "Use only alphanumeric characters, hyphens, and underscores."
             )
         return safe
