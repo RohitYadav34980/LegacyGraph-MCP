@@ -86,9 +86,10 @@ class GraphPool:
 graph_pool = GraphPool()
 parser_service = CppParser()
 
-# Backward-compat shim: graph_service → default pool graph (local mode)
-# Tests and legacy callers may rebind this module-level var to reset state.
-graph_service = graph_pool.get_graph()
+# Backward-compat shim: graph_service → default pool graph (local mode only).
+# In cloud mode, project_id is required per-request, so we leave this as None.
+# Tests and legacy local callers may rebind this module-level var to reset state.
+graph_service = graph_pool.get_graph() if config.MCP_MODE != "cloud" else None
 
 
 def reset_graph_service(graph: Optional[DependencyGraph] = None) -> DependencyGraph:
@@ -99,6 +100,10 @@ def reset_graph_service(graph: Optional[DependencyGraph] = None) -> DependencyGr
     rebind src.utils.services.graph_service to reset state.
     """
     global graph_service
+    if config.MCP_MODE == "cloud":
+        # In cloud mode there is no single default graph; callers must use project_id.
+        graph_service = None
+        return graph_service  # type: ignore[return-value]
     graph_service = graph if graph is not None else graph_pool.get_graph()
     return graph_service
 
