@@ -171,6 +171,23 @@ def analyze_codebase(
 
     # ---- Workflow 2: Raw file objects ------------------------------
     if raw_files is not None:
+        # ── Cache-hit check ───────────────────────────────────────────────────
+        # get_graph() already loaded the cache from disk on first access.
+        # If the graph already has nodes, the content hasn't changed (same
+        # content hash → same target_id) so we skip expensive re-parsing.
+        existing_nodes = graph.get_all_nodes()
+        if existing_nodes:
+            node_count = len(existing_nodes)
+            logger.info(
+                f"Raw files cache hit for {target_id}. "
+                f"Skipping re-parse. Tracking {node_count} functions."
+            )
+            return (
+                f"Project '{target_id}' loaded from cache. "
+                f"Tracking {node_count} functions. Ready for queries."
+            )
+
+        # ── Full parse (cache miss) ───────────────────────────────────────────
         files_parsed = 0
         for entry in raw_files:
             filename = entry.get("filename", "")
