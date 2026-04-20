@@ -87,6 +87,7 @@ def analyze_codebase(
     else:
         # For raw_files, we use a session-based or content-based ID
         # Sort by filename for deterministic hashing
+        assert raw_files is not None
         sorted_files = sorted(raw_files, key=lambda f: f.get("filename", ""))
         normalized = "".join(
             f"{f.get('filename', '')}:{f.get('content', '')}" for f in sorted_files
@@ -112,7 +113,7 @@ def analyze_codebase(
     if repo_url is not None:
         # Check Remote Hash First (Optimization)
         current_hash = _get_remote_hash(repo_url)
-        if current_hash and hasattr(graph, "vcs_hash") and graph.vcs_hash == current_hash:
+        if current_hash and graph.vcs_hash == current_hash:
             return (
                 f"Project '{repo_url}' is up-to-date in cache. "
                 f"Project ID: {target_id}. Ready for queries."

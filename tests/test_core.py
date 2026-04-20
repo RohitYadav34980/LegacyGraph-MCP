@@ -275,10 +275,9 @@ def test_file_subgraph_empty(graph):
 # --- Case L: analyze_codebase with raw_files ---
 def test_analyze_codebase_raw_files():
     """analyze_codebase should accept raw_files and build the graph."""
+    import hashlib
     from src.tools.analysis import analyze_codebase
     import src.utils.services as services
-
-    services.graph_service = DependencyGraph()
 
     raw = [
         {"filename": "main.cpp", "content": "void main() { helper(); }"},
@@ -286,11 +285,19 @@ def test_analyze_codebase_raw_files():
     ]
     result = analyze_codebase(raw_files=raw)
 
-    assert "2" in result  # 2 files parsed
     assert "error" not in result.lower()
+    # "2" appears either in "Analyzed 2 raw files" (cache miss) or "Tracking 2 functions" (cache hit)
+    assert "2" in result
 
-    # Verify graph was populated
-    nodes = services.graph_service.get_all_nodes()
+    # Compute deterministic target_id to look up the pool graph
+    sorted_files = sorted(raw, key=lambda f: f.get("filename", ""))
+    normalized = "".join(
+        f"{f.get('filename', '')}:{f.get('content', '')}" for f in sorted_files
+    )
+    content_hash = hashlib.sha256(normalized.encode()).hexdigest()[:12]
+    target_id = f"raw_{content_hash}"
+
+    nodes = services.graph_pool.get_graph(target_id).get_all_nodes()
     assert "main" in nodes
     assert "helper" in nodes
 
@@ -298,6 +305,7 @@ def test_analyze_codebase_raw_files():
 # --- Case M: analyze_codebase with directory_path (local) ---
 def test_analyze_codebase_directory_path_local():
     """analyze_codebase with directory_path should work in local mode."""
+    import hashlib
     from src.tools.analysis import analyze_codebase
     import src.utils.config as config
     import src.utils.services as services
@@ -311,12 +319,16 @@ def test_analyze_codebase_directory_path_local():
 
         result = analyze_codebase(directory_path=tmpdir)
 
-        assert "1" in result  # 1 file parsed
         assert "error" not in result.lower()
+        # "1" appears in "Analyzed local workspace..." or node count
+        assert "1" in result
 
-        nodes = services.graph_service.get_all_nodes()
+        # Compute deterministic target_id to look up the pool graph
+        target_id = hashlib.sha256(tmpdir.encode()).hexdigest()[:8]
+        nodes = services.graph_pool.get_graph(target_id).get_all_nodes()
         assert "foo" in nodes
         assert "bar" in nodes
+
 
 
 # --- Case N: analyze_codebase rejects directory_path in cloud mode ---

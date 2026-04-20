@@ -56,9 +56,9 @@ def _scan_directory(workspace: Path, cache_path: Optional[str] = None, graph: Op
     if cache_path is None:
         cache_path = str(workspace / ".legacygraph.json")
 
-    # Use the provided graph or fall back to the pool's default — always the SAME instance
+    # Use the provided graph or fall back to graph_service — always the SAME instance
     if graph is None:
-        graph = services.graph_pool.get_graph()
+        graph = services.graph_service
 
     # 1. Attempt to load existing cache
     if graph.load_cache(cache_path):

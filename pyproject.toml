@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "legacy-mcp-analyzer"
-version = "0.3.0"
+version = "0.4.0"
 description = "MCP Server for analyzing C++ legacy codebases"
 authors = ["Antigravity <antigravity@example.com>"]
 readme = "README.md"
@@ -15,7 +15,7 @@ networkx = "^3.2.1"
 gitpython = "^3.1.0"
 uvicorn = "^0.41.0"
 starlette = "^0.52.1"
-huggingface-hub = {version = "^0.28.0", extras = ["cli"]}
+huggingface-hub = "^0.28.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"

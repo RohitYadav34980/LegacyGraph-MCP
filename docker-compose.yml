@@ -24,7 +24,7 @@ services:
     restart: unless-stopped
     healthcheck:
       # Use CMD-SHELL so ${PORT} variable is expanded by the shell.
-      test: ["CMD-SHELL", "curl -f http://localhost:${PORT:-8000}/.well-known/mcp/server-card.json || exit 1"]
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:${PORT:-8000}/.well-known/mcp/server-card.json')\" || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
