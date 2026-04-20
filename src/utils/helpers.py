@@ -291,32 +291,63 @@ def _get_remote_hash(repo_url: str) -> Optional[str]:
 def _sync_to_hf_bucket() -> bool:
     """
     Synchronizes the local cache directory to the configured Hugging Face bucket.
-    Uses the huggingface_hub Python library for reliability.
+
+    Priority order:
+      1. If a persistent storage volume is mounted at /data (IS_STORAGE_MOUNTED),
+         the cache is already on durable storage — no API call needed.
+      2. If HF_BUCKET_URL starts with hf://buckets/, use the native sync_bucket API.
+      3. Fallback: upload_folder to a standard HF repo (dataset/model/space).
     """
     if config.MCP_MODE != "cloud":
         return False
 
+    # ── Priority 1: Persistent mount detected — cache is already durable ──────
+    # This check MUST come before the HF_BUCKET_URL guard so it fires even when
+    # no bucket URL is configured (bucket mounted via Spaces UI, not env var).
+    if getattr(config, "IS_STORAGE_MOUNTED", False):
+        os.makedirs(config.LEGACYGRAPH_CACHE_ROOT, exist_ok=True)
+        logger.info(
+            f"Persistent storage mounted at '{config.PERSISTENT_STORAGE_ROOT}'. "
+            f"Cache is written directly to '{config.LEGACYGRAPH_CACHE_ROOT}'. "
+            "Skipping manual HF API sync."
+        )
+        return True
+
     if not config.HF_BUCKET_URL:
-        logger.warning("HF_BUCKET_URL is not set. Skipping HF sync. Set the env var to enable persistence.")
+        logger.warning(
+            "No persistent storage mount detected and HF_BUCKET_URL is not set. "
+            "Cache will NOT persist across restarts. "
+            "Mount a Storage Bucket in the Space settings or set HF_BUCKET_URL."
+        )
         return False
 
     try:
+        # ── Priority 2: Native Storage Bucket via hf://buckets/ URL ─────────
+        if config.HF_BUCKET_URL.startswith("hf://buckets/"):
+            from huggingface_hub import sync_bucket
+            logger.info(f"Syncing {config.LEGACYGRAPH_CACHE_ROOT} to native bucket '{config.HF_BUCKET_URL}'...")
+            sync_bucket(
+                local_path=config.LEGACYGRAPH_CACHE_ROOT,
+                remote_path=config.HF_BUCKET_URL,
+                token=os.environ.get("HF_TOKEN"),
+            )
+            logger.info("HF Bucket Sync completed successfully.")
+            return True
+
+        # ── Priority 3: Standard HF Repo (dataset / model / space) ──────────
         from huggingface_hub import HfApi
-        
-        # Parse hf://[type]/[namespace]/[repo]
-        # Example: hf://datasets/Rohitadav/GraphPulse-storage
+        # Parse hf://datasets/namespace/repo  →  repo_type="dataset", repo_id="namespace/repo"
         url = config.HF_BUCKET_URL.replace("hf://", "")
         parts = url.split("/")
-        
+
         repo_type = "dataset"
         if parts[0] in ["datasets", "models", "spaces"]:
-            repo_type = parts[0].rstrip("s") # "datasets" -> "dataset"
+            repo_type = parts[0].rstrip("s")   # "datasets" → "dataset"
             repo_id = "/".join(parts[1:])
         else:
             repo_id = "/".join(parts)
 
-        logger.info(f"Syncing {config.LEGACYGRAPH_CACHE_ROOT} to {repo_type} '{repo_id}' using HfApi...")
-        
+        logger.info(f"Syncing {config.LEGACYGRAPH_CACHE_ROOT} to {repo_type} repo '{repo_id}' using HfApi...")
         api = HfApi()
         api.upload_folder(
             folder_path=config.LEGACYGRAPH_CACHE_ROOT,
@@ -324,10 +355,9 @@ def _sync_to_hf_bucket() -> bool:
             repo_type=repo_type,
             token=os.environ.get("HF_TOKEN"),
         )
-        
-        logger.info("HF Sync completed successfully.")
+        logger.info("HF Repo Sync completed successfully.")
         return True
-        
+
     except ImportError:
         logger.warning("huggingface_hub library not found. Skipping sync. Please `pip install huggingface_hub`.")
     except Exception as e:
