@@ -365,12 +365,14 @@ def test_generate_mermaid_graph():
     """generate_mermaid_graph should return a Mermaid string, not write a file."""
     from src.tools.export import generate_mermaid_graph
     from src.tools.analysis import analyze_codebase
+    from src.utils.helpers import _get_raw_files_project_id
 
     # Populate graph
     raw = [{"filename": "a.cpp", "content": "void alpha() { beta(); }\nvoid beta() {}"}]
     analyze_codebase(raw_files=raw)
 
-    result = generate_mermaid_graph()
+    project_id = _get_raw_files_project_id(raw)
+    result = generate_mermaid_graph(project_id=project_id)
 
     assert "mermaid" in result
     assert "graph TD" in result
@@ -383,13 +385,15 @@ def test_generate_mermaid_graph_with_focus():
     """generate_mermaid_graph with focus_node should limit output."""
     from src.tools.export import generate_mermaid_graph
     from src.tools.analysis import analyze_codebase
+    from src.utils.helpers import _get_raw_files_project_id
 
     raw = [
         {"filename": "a.cpp", "content": "void a() { b(); }\nvoid b() { c(); }\nvoid c() {}"},
     ]
     analyze_codebase(raw_files=raw)
 
-    result = generate_mermaid_graph(focus_node="a", max_depth=1)
+    project_id = _get_raw_files_project_id(raw)
+    result = generate_mermaid_graph(focus_node="a", max_depth=1, project_id=project_id)
 
     assert "mermaid" in result
     assert "a" in result
