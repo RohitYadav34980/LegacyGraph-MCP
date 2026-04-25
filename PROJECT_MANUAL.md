@@ -181,7 +181,87 @@ Returns a message telling the user to open the file in their IDE's Markdown Prev
 
 ---
 
-## 8. Project Structure
+## 8. Docker Deployment
+
+LegacyGraph-MCP ships with a multi-stage `Dockerfile` and a `docker-compose.yml` for one-command deployment.
+
+### Quick Start (docker-compose)
+```bash
+# Clone and start
+git clone https://github.com/RohitYadav34980/LegacyGraph-MCP.git
+cd LegacyGraph-MCP
+
+# Create the data directory with correct ownership
+mkdir -p ./data && chown -R 1000:1000 ./data  # Linux/macOS only
+
+# Start the server (cloud mode, port 8000)
+docker compose up -d
+```
+
+The server will be available at `http://localhost:8000/mcp` (streamable-http transport).
+
+### Environment Variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `MCP_MODE` | `cloud` | `local` or `cloud` |
+| `PORT` | `8000` (compose) / `7860` (HF) | HTTP listen port |
+| `HF_TOKEN` | — | Hugging Face API token (optional) |
+| `HF_BUCKET_URL` | — | HF Storage Bucket URL for cache persistence |
+
+Override defaults by creating a `.env` file:
+```bash
+MCP_MODE=cloud
+PORT=8000
+HF_TOKEN=hf_your_token_here
+```
+
+### Standalone Docker
+```bash
+# Build the image
+docker build -t legacygraph-mcp:latest .
+
+# Run with port mapping
+docker run -d \
+  --name legacy-mcp-analyzer \
+  -p 8000:8000 \
+  -e MCP_MODE=cloud \
+  -e PORT=8000 \
+  -v ./data:/home/user/app/data \
+  legacygraph-mcp:latest
+```
+
+### Hugging Face Spaces Deployment
+
+1. **Create a Space** — go to [huggingface.co/new-space](https://huggingface.co/new-space) and select **Docker** as the SDK.
+2. **Push** — the `README.md` YAML header configures the Space automatically:
+   ```yaml
+   ---
+   title: GraphPulse
+   emoji: 🐺
+   sdk: docker
+   app_port: 7860
+   pinned: false
+   ---
+   ```
+3. **Push the repo** to your Space:
+   ```bash
+   git remote add hf https://huggingface.co/spaces/YourUser/YourSpace
+   git push hf main --force
+   ```
+4. **Persistent storage** — HF Spaces provides a `/data` mount. The server caches `.legacygraph.json` files there when available.
+5. **Health check** — the container exposes `/.well-known/mcp/server-card.json` for health monitoring.
+
+### Resource Limits
+
+The `docker-compose.yml` sets sensible defaults:
+- **Memory**: 4 GB (sufficient for codebases up to ~100k files)
+- **CPU**: 2 cores
+- **Restart policy**: `unless-stopped`
+
+---
+
+## 9. Project Structure
 
 ```
 LegacyGraph-MCP/
@@ -202,14 +282,19 @@ LegacyGraph-MCP/
 │       ├── services.py           # Global singletons
 │       └── helpers.py            # Git ops, directory scanning
 ├── tests/                        # Pytest test suite
-│   └── test_core.py              # 20 test cases
+│   ├── test_core.py              # 20 unit test cases
+│   ├── test_remote_smoke.py      # Remote endpoint smoke tests
+│   └── benchmark_timing.py       # Performance benchmarks
 ├── tools/                        # Dev utilities
 │   └── verifier.py               # End-to-end accuracy verifier
 ├── data/                         # Sample legacy C++ project
 │   └── legacy_project/
+├── Dockerfile                    # Multi-stage Docker build
+├── docker-compose.yml            # One-command container orchestration
+├── .dockerignore                 # Docker build exclusions
 ├── pyproject.toml                # Poetry config & dependencies
 ├── smithery.yaml                 # Smithery deployment config
-├── README.md                     # Quick start guide
+├── README.md                     # Quick start guide (+ HF Spaces metadata)
 ├── ARCHITECTURE.md               # Detailed architecture docs
 ├── CONTRIBUTING.md               # Development standards
 └── CHANGELOG.md                  # Version history
@@ -217,7 +302,7 @@ LegacyGraph-MCP/
 
 ---
 
-## 9. Testing & Verification
+## 10. Testing & Verification
 
 ### Unit Tests (20 cases)
 ```bash
@@ -240,12 +325,17 @@ Runs against the sample C++ project in `data/legacy_project/` and validates:
 
 ---
 
-## 10. Troubleshooting
+## 11. Troubleshooting
 
 | Issue | Solution |
-|---|---|
+|---|---|---|
 | `tree-sitter` import fails | Run `poetry install` — ensure `tree-sitter-cpp` is in your env |
 | `FastMCP not found` | Run `pip install fastmcp` or ensure `mcp` is in dependencies |
 | `directory_path` rejected | You're in cloud mode — use `repo_url` or `raw_files` instead |
 | `git clone` fails | Ensure `git` is installed and the repo URL is valid HTTPS |
 | Server won't start on Render | Set `MCP_MODE=cloud` env var and ensure `PORT` is exposed |
+| Docker build fails with poetry lock error | Run `poetry lock --no-update` then rebuild |
+| Container exits immediately | Check `docker logs legacy-mcp-analyzer` — usually a missing env var |
+| Port conflict on `docker compose up` | Change `PORT` in `.env` or stop conflicting services |
+| HF Spaces shows "Build failed" | Ensure `README.md` YAML header has `sdk: docker` and `app_port: 7860` |
+| Permission denied on `./data` mount | Run `mkdir -p ./data && chown -R 1000:1000 ./data` on the host |
