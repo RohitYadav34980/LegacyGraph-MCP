@@ -59,13 +59,6 @@ mcp = FastMCP(
     host=os.environ.get("MCP_HOST", "0.0.0.0"),
     port=int(os.environ.get("PORT", "8000")),
     streamable_http_path="/mcp",
-    capabilities={
-        "tasks": {
-            "requests": {
-                "tools/call": {}
-            }
-        }
-    }
 )
 
 
