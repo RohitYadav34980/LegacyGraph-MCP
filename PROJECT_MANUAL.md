@@ -191,8 +191,8 @@ LegacyGraph-MCP ships with a multi-stage `Dockerfile` and a `docker-compose.yml`
 git clone https://github.com/RohitYadav34980/LegacyGraph-MCP.git
 cd LegacyGraph-MCP
 
-# Create the data directory with correct ownership
-mkdir -p ./data && chown -R 1000:1000 ./data  # Linux/macOS only
+# Create the data directory with correct ownership (Linux/macOS only)
+mkdir -p ./data && chown -R $(id -u):$(id -g) ./data
 
 # Start the server (cloud mode, port 8000)
 docker compose up -d
@@ -338,4 +338,4 @@ Runs against the sample C++ project in `data/legacy_project/` and validates:
 | Container exits immediately | Check `docker logs legacy-mcp-analyzer` — usually a missing env var |
 | Port conflict on `docker compose up` | Change `PORT` in `.env` or stop conflicting services |
 | HF Spaces shows "Build failed" | Ensure `README.md` YAML header has `sdk: docker` and `app_port: 7860` |
-| Permission denied on `./data` mount | Run `mkdir -p ./data && chown -R 1000:1000 ./data` on the host |
+| Permission denied on `./data` mount | Run `mkdir -p ./data && chown -R $(id -u):$(id -g) ./data` on the host (Linux/macOS) |
