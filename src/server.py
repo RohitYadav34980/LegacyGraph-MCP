@@ -10,6 +10,8 @@ import os
 
 from src.utils.logger import logger
 import src.utils.config as config
+import src.utils.services as services
+from src.utils.tasks import TaskState
 from src.tools import (
     analyze_codebase,
     get_file_functions,
@@ -95,31 +97,39 @@ def _register_tools(mode: str) -> None:
         task = services.task_registry.get_task(task_id)
         if not task:
             return {"error": f"Task {task_id} not found."}
-        
+
         return {
             "taskId": task.id,
             "state": task.state.value,
             "progress": task.progress,
             "status_text": task.status_text,
-            "updated_at": task.updated_at.isoformat() if task.updated_at else None
+            "updated_at": task.updated_at.isoformat(),
         }
+
     @mcp.tool()
     def get_task_result(task_id: str) -> Dict[str, Any]:
         """Retrieve the result of a completed task."""
         task = services.task_registry.get_task(task_id)
         if not task:
             return {"error": f"Task {task_id} not found."}
-        
-        if task.state.value != "completed":
+
+        if task.state == TaskState.COMPLETED:
+            return {
+                "taskId": task.id,
+                "result": task.result,
+            }
+
+        if task.state in (TaskState.FAILED, TaskState.CANCELLED):
             return {
                 "taskId": task.id,
                 "state": task.state.value,
-                "error": "Task not yet completed."
+                "error": task.error or task.status_text,
             }
-        
+
         return {
             "taskId": task.id,
-            "result": task.result
+            "state": task.state.value,
+            "message": "Task not yet completed.",
         }
 
     # Local-only tools
@@ -138,7 +148,6 @@ def _register_tools(mode: str) -> None:
 async def server_card(_: object) -> "JSONResponse":
     from starlette.responses import JSONResponse
 
-    tools: List[Dict[str, str]] = [
     tools: List[Dict[str, str]] = [
         {
             "name": "analyze_codebase",
@@ -184,7 +193,8 @@ async def server_card(_: object) -> "JSONResponse":
             "name": "get_task_result",
             "description": "Retrieve the result of a completed task.",
         },
-    ]    # Only advertise export_ide_graph in local mode
+    ]
+    # Only advertise export_ide_graph in local mode
     if config.MCP_MODE == "local":
         tools.append(
             {

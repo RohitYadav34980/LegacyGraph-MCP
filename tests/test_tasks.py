@@ -1,5 +1,5 @@
 import pytest
-import time
+import asyncio
 from datetime import datetime, timedelta
 from src.utils.tasks import TaskRegistry, TaskState
 from src.tools.analysis import analyze_codebase
@@ -37,13 +37,20 @@ async def test_analyze_as_task():
     # This requires some patching if we want a real E2E
     # For now, let's just verify the tool returns a taskId
     result = analyze_codebase(raw_files=[{"filename": "test.cpp", "content": "void f(){}"}], as_task=True)
-    
+
     assert "taskId" in result
     task_id = result["taskId"]
-    
-    # Wait for background task to finish (it's very fast since it's raw_files)
-    time.sleep(1) 
-    
-    task = services.task_registry.get_task(task_id)
+
+    # Poll until the background task reaches a terminal state (with a timeout)
+    terminal_states = (TaskState.COMPLETED, TaskState.FAILED, TaskState.CANCELLED)
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + 10
+    task = None
+    while loop.time() < deadline:
+        task = services.task_registry.get_task(task_id)
+        if task is not None and task.state in terminal_states:
+            break
+        await asyncio.sleep(0.1)
+
     assert task is not None
-    assert task.state in (TaskState.RUNNING, TaskState.COMPLETED)
+    assert task.state in terminal_states

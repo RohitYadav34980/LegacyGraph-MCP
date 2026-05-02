@@ -106,13 +106,19 @@ def analyze_codebase(
 
     if as_task:
         task = services.task_registry.create_task(metadata={"project_id": target_id, "type": "analysis"})
-        
-        def run_analysis():
+
+        def run_analysis() -> None:
             try:
                 task.update(state=TaskState.RUNNING, status_text="Starting analysis...")
-                result = _do_analysis(repo_url, patch_content, raw_files, directory_path, target_id, cache_path, graph, task)
-                task.update(state=TaskState.COMPLETED, progress=100, status_text="Analysis complete.")
-                task.result = result
+                graph_lock = services.graph_pool.get_graph_lock(target_id)
+                with graph_lock:
+                    result = _do_analysis(repo_url, patch_content, raw_files, directory_path, target_id, cache_path, graph, task)
+                if isinstance(result, str) and result.startswith("Error"):
+                    task.update(state=TaskState.FAILED, status_text=result)
+                    task.error = result
+                else:
+                    task.update(state=TaskState.COMPLETED, progress=100, status_text="Analysis complete.")
+                    task.result = result
             except Exception as e:
                 logger.error(f"Task {task.id} failed: {e}")
                 task.update(state=TaskState.FAILED, status_text=f"Error: {str(e)}")

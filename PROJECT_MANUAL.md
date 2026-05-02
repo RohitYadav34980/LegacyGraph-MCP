@@ -328,7 +328,7 @@ Runs against the sample C++ project in `data/legacy_project/` and validates:
 ## 11. Troubleshooting
 
 | Issue | Solution |
-|---|---|---|
+|---|---|
 | `tree-sitter` import fails | Run `poetry install` — ensure `tree-sitter-cpp` is in your env |
 | `FastMCP not found` | Run `pip install fastmcp` or ensure `mcp` is in dependencies |
 | `directory_path` rejected | You're in cloud mode — use `repo_url` or `raw_files` instead |

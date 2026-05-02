@@ -42,6 +42,7 @@ class DependencyGraph:
         self.graph.remove_nodes_from(nodes_to_remove)
         self._version += 1
         self._cycle_cache = None
+
     def save_cache(self, cache_path: str) -> None:
         """Serializes the graph and mtimes to disk using JSON (safe format)."""
         try:

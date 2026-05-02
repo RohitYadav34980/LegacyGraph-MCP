@@ -1,6 +1,7 @@
 from enum import Enum
 from typing import Any, Dict, Optional, List
 from dataclasses import dataclass, field
+import threading
 import uuid
 from datetime import datetime
 
@@ -33,29 +34,34 @@ class Task:
         self.updated_at = datetime.now()
 
 class TaskRegistry:
-    def __init__(self):
+    def __init__(self) -> None:
         self._tasks: Dict[str, Task] = {}
+        self._lock = threading.Lock()
 
     def create_task(self, metadata: Optional[Dict[str, Any]] = None) -> Task:
         # Periodic cleanup on new task creation
         self.cleanup_completed_tasks()
         task = Task(metadata=metadata or {})
-        self._tasks[task.id] = task
+        with self._lock:
+            self._tasks[task.id] = task
         return task
 
     def get_task(self, task_id: str) -> Optional[Task]:
-        return self._tasks.get(task_id)
+        with self._lock:
+            return self._tasks.get(task_id)
 
     def list_tasks(self) -> List[Task]:
-        return list(self._tasks.values())
+        with self._lock:
+            return list(self._tasks.values())
 
-    def cleanup_completed_tasks(self, max_age_seconds: int = 3600):
+    def cleanup_completed_tasks(self, max_age_seconds: int = 3600) -> None:
         """Remove tasks that completed/failed more than an hour ago."""
         now = datetime.now()
-        to_delete = [
-            tid for tid, t in self._tasks.items()
-            if t.state in (TaskState.COMPLETED, TaskState.FAILED, TaskState.CANCELLED)
-            and (now - t.updated_at).total_seconds() > max_age_seconds
-        ]
-        for tid in to_delete:
-            del self._tasks[tid]
+        with self._lock:
+            to_delete = [
+                tid for tid, t in self._tasks.items()
+                if t.state in (TaskState.COMPLETED, TaskState.FAILED, TaskState.CANCELLED)
+                and (now - t.updated_at).total_seconds() > max_age_seconds
+            ]
+            for tid in to_delete:
+                del self._tasks[tid]
