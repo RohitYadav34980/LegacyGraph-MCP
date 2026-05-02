@@ -57,6 +57,13 @@ mcp = FastMCP(
     host=os.environ.get("MCP_HOST", "0.0.0.0"),
     port=int(os.environ.get("PORT", "8000")),
     streamable_http_path="/mcp",
+    capabilities={
+        "tasks": {
+            "requests": {
+                "tools/call": {}
+            }
+        }
+    }
 )
 
 
@@ -80,6 +87,40 @@ def _register_tools(mode: str) -> None:
     mcp.tool()(detect_cycles)
     mcp.tool()(get_orphan_functions)
     mcp.tool()(generate_mermaid_graph)
+    
+    # Task Management (SEP-1686)
+    @mcp.tool()
+    def get_task_status(task_id: str) -> Dict[str, Any]:
+        """Check the status of a long-running task."""
+        task = services.task_registry.get_task(task_id)
+        if not task:
+            return {"error": f"Task {task_id} not found."}
+        
+        return {
+            "taskId": task.id,
+            "state": task.state.value,
+            "progress": task.progress,
+            "status_text": task.status_text,
+            "updated_at": task.updated_at.isoformat() if task.updated_at else None
+        }
+    @mcp.tool()
+    def get_task_result(task_id: str) -> Dict[str, Any]:
+        """Retrieve the result of a completed task."""
+        task = services.task_registry.get_task(task_id)
+        if not task:
+            return {"error": f"Task {task_id} not found."}
+        
+        if task.state.value != "completed":
+            return {
+                "taskId": task.id,
+                "state": task.state.value,
+                "error": "Task not yet completed."
+            }
+        
+        return {
+            "taskId": task.id,
+            "result": task.result
+        }
 
     # Local-only tools
     if mode == "local":
@@ -134,9 +175,15 @@ async def server_card(_: object) -> "JSONResponse":
             "name": "generate_mermaid_graph",
             "description": "Generate inline Mermaid diagram. Requires project_id for isolation.",
         },
-    ]
-
-    # Only advertise export_ide_graph in local mode
+        {
+            "name": "get_task_status",
+            "description": "Check the status of a long-running task. Returns state, progress, and status text.",
+        },
+        {
+            "name": "get_task_result",
+            "description": "Retrieve the result of a completed task.",
+        },
+    ]    # Only advertise export_ide_graph in local mode
     if config.MCP_MODE == "local":
         tools.append(
             {

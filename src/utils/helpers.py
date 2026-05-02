@@ -4,7 +4,7 @@ import shutil
 import os
 import concurrent.futures
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from src.core.graph import GraphError
 from src.core.parser import CppParser
@@ -40,7 +40,7 @@ def _parse_chunk_worker(
     return results
 
 
-def _scan_directory(workspace: Path, cache_path: Optional[str] = None, graph: Optional["DependencyGraph"] = None) -> tuple[int, int, int]:
+def _scan_directory(workspace: Path, cache_path: Optional[str] = None, graph: Optional["DependencyGraph"] = None, task: Optional[Any] = None) -> tuple[int, int, int]:
     """
     Scan a directory for C++ files, parse them using multi-core processing,
     and populate the given graph incrementally.
@@ -147,6 +147,8 @@ def _scan_directory(workspace: Path, cache_path: Optional[str] = None, graph: Op
                 # Report progress after every chunk completes
                 percent = (processed_files / total_files) * 100
                 logger.info(f"Progress: {processed_files}/{total_files} files processed ({percent:.1f}%)")
+                if task:
+                    task.update(progress=int(percent), status_text=f"Parsing files: {processed_files}/{total_files}")
 
         # 4. Save cache after modifying graph
         graph.save_cache(cache_path)
