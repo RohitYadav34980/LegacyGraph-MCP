@@ -139,6 +139,7 @@ async def server_card(_: object) -> "JSONResponse":
     from starlette.responses import JSONResponse
 
     tools: List[Dict[str, str]] = [
+    tools: List[Dict[str, str]] = [
         {
             "name": "analyze_codebase",
             "description": (
