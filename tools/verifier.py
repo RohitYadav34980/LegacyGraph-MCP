@@ -7,6 +7,7 @@ from typing import Optional
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from src.tools import analyze_codebase, get_callers, get_callees, detect_cycles, get_orphan_functions
+from src.utils.helpers import _get_raw_files_project_id
 
 def run_verification():
     print("=== Starting LegacyGraph-MCP Verification ===")
@@ -51,6 +52,9 @@ def run_verification():
     ]
     
     EXPECTED_ORPHANS = {"hidden_backdoor"} # technically 'main' is often an entry point, not orphan.
+
+    # Compute the project_id that analyze_codebase will assign to these raw files
+    project_id = _get_raw_files_project_id(raw_files)
     
     print("\n--- Step 1: Analyze Codebase ---")
     result = analyze_codebase(raw_files=raw_files)
@@ -68,7 +72,7 @@ def run_verification():
     print(f"Checking {total_edges} expected dependencies...")
     
     for caller, callee in EXPECTED_EDGES:
-        callees = get_callees(caller)
+        callees = get_callees(caller, project_id=project_id)
         if callee in callees:
             print(f"  [OK] {caller} -> {callee}")
             found_edges += 1
@@ -80,7 +84,7 @@ def run_verification():
     
     # Check Cycles
     print("\nChecking Cycle Detection...")
-    cycles = detect_cycles()
+    cycles = detect_cycles(project_id=project_id)
     has_recursion = "main_loop -> main_loop" in cycles
     if has_recursion:
         print("  [OK] Detected 'main_loop' recursion.")
@@ -89,7 +93,7 @@ def run_verification():
 
     # Check Orphans
     print("\nChecking Orphan Detection...")
-    orphans = get_orphan_functions()
+    orphans = get_orphan_functions(project_id=project_id)
     actual_orphans = set(orphans.replace("Orphan functions (never called): ", "").split(", "))
     
     orphan_hit = 0

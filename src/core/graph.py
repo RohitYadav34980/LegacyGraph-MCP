@@ -30,6 +30,8 @@ class DependencyGraph:
         self.graph = nx.DiGraph()
         self.file_mtimes: Dict[str, float] = {}
         self.vcs_hash: Optional[str] = None
+        self._version: int = 0
+        self._cycle_cache: Optional[List[List[str]]] = None
 
     def remove_file_nodes(self, filepath: str) -> None:
         """Removes all nodes associated with a specific file."""
@@ -38,6 +40,8 @@ class DependencyGraph:
             if attrs.get("file", "") == filepath
         ]
         self.graph.remove_nodes_from(nodes_to_remove)
+        self._version += 1
+        self._cycle_cache = None
 
     def save_cache(self, cache_path: str) -> None:
         """Serializes the graph and mtimes to disk using JSON (safe format)."""
@@ -93,6 +97,8 @@ class DependencyGraph:
             self.graph = g
             self.file_mtimes = data.get("file_mtimes", {})
             self.vcs_hash = data.get("vcs_hash")
+            self._version += 1
+            self._cycle_cache = None
             logger.info(f"Loaded graph cache from {cache_path}")
             return True
         except Exception as e:
@@ -108,6 +114,8 @@ class DependencyGraph:
             callee: The name of the function being called.
         """
         self.graph.add_edge(caller, callee)
+        self._version += 1
+        self._cycle_cache = None
 
     def build_from_parsed_data(
         self, data: List[tuple[str, Set[str]]], filepath: str = ""
@@ -132,8 +140,12 @@ class DependencyGraph:
             A list of cycles, where each cycle is a list of function names.
         """
         try:
+            if self._cycle_cache is not None:
+                return self._cycle_cache
+            
             cycles = list(nx.simple_cycles(self.graph))
-            return cycles  # type: ignore
+            self._cycle_cache = cycles  # type: ignore
+            return self._cycle_cache
         except Exception as e:
             logger.error(f"Error detecting cycles: {e}")
             raise GraphError(f"Cycle detection failed: {e}")
