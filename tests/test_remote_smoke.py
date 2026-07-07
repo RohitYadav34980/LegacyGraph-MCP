@@ -69,19 +69,17 @@ def test_cloud_tool_registration():
     """
     _register_tools('cloud') must NOT register export_ide_graph.
 
-    _register_tools operates on the module-level `mcp` instance in src.server,
-    so we reset its internal tool manager, call _register_tools, then inspect
-    the registered tool names via list_tools().
+    Uses a fresh FastMCP instance (instead of mutating the module-level
+    singleton) and the public get_tools() API from FastMCP 2.x.
     """
-    from mcp.server.fastmcp.tools.tool_manager import ToolManager  # type: ignore
-    from src.server import mcp, _register_tools
+    import asyncio
+    from fastmcp import FastMCP
+    from src.server import _register_tools
 
-    # Reset to a known-empty state
-    mcp._tool_manager = ToolManager(warn_on_duplicate_tools=False)
+    fresh_server = FastMCP(name="test-cloud-registration")
+    _register_tools("cloud", server=fresh_server)
 
-    _register_tools("cloud")
-
-    registered = [t.name for t in mcp._tool_manager.list_tools()]
+    registered = list(asyncio.run(fresh_server.get_tools()).keys())
 
     assert "export_ide_graph" not in registered, (
         f"export_ide_graph must NOT be registered in cloud mode; got: {registered}"

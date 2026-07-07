@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-import networkx as nx  # type: ignore
+import networkx as nx
 
 logger = logging.getLogger(__name__)
 
@@ -144,8 +144,8 @@ class DependencyGraph:
                 return self._cycle_cache
             
             cycles = list(nx.simple_cycles(self.graph))
-            self._cycle_cache = cycles  # type: ignore
-            return self._cycle_cache
+            self._cycle_cache = cycles
+            return cycles
         except Exception as e:
             logger.error(f"Error detecting cycles: {e}")
             raise GraphError(f"Cycle detection failed: {e}")

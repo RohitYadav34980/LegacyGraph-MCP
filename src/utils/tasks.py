@@ -24,7 +24,7 @@ class Task:
     updated_at: datetime = field(default_factory=datetime.now)
     metadata: Dict[str, Any] = field(default_factory=dict)
 
-    def update(self, state: Optional[TaskState] = None, progress: Optional[int] = None, status_text: Optional[str] = None):
+    def update(self, state: Optional[TaskState] = None, progress: Optional[int] = None, status_text: Optional[str] = None) -> None:
         if state:
             self.state = state
         if progress is not None:

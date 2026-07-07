@@ -286,6 +286,6 @@ The `/.well-known/mcp/server-card.json` endpoint dynamically reflects the curren
 | `tree-sitter` | ^0.23.0 | Incremental parsing framework |
 | `tree-sitter-cpp` | ^0.23.0 | C++ grammar for tree-sitter |
 | `networkx` | ^3.2.1 | Directed graph data structure |
-| `mcp` / `fastmcp` | ^1.0.0 | MCP server framework |
+| `fastmcp` | >=2.14,<3 | FastMCP 2.x server framework (bundles the official `mcp` SDK) |
 | `uvicorn` | ^0.41.0 | ASGI server for HTTP mode |
 | `starlette` | ^0.52.1 | HTTP routing (server card) |

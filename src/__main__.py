@@ -28,9 +28,12 @@ def main() -> None:
     )
     parser.add_argument(
         "--transport",
-        choices=["streamable-http", "sse", "stdio"],
+        choices=["http", "streamable-http", "sse", "stdio"],
         default=None,
-        help="Transport protocol. Defaults to stdio (local) or streamable-http (cloud).",
+        help=(
+            "Transport protocol. Defaults to stdio (local) or http (cloud). "
+            "'streamable-http' is accepted as an alias for 'http'."
+        ),
     )
     parser.add_argument(
         "--path",
@@ -56,7 +59,7 @@ def main() -> None:
         config.MCP_MODE = args.mode
     elif os.environ.get("MCP_MODE"):
         config.MCP_MODE = os.environ["MCP_MODE"]
-    elif args.transport in ("streamable-http", "sse"):
+    elif args.transport in ("http", "streamable-http", "sse"):
         # HTTP transport almost certainly means cloud / remote hosting
         config.MCP_MODE = "cloud"
     else:
@@ -67,16 +70,16 @@ def main() -> None:
     # ---- Resolve transport ----------------------------------------
     transport = args.transport
     if transport is None:
-        transport = "stdio" if config.MCP_MODE == "local" else "streamable-http"
+        transport = "stdio" if config.MCP_MODE == "local" else "http"
+    elif transport == "streamable-http":
+        # FastMCP 2.x canonical name for the Streamable HTTP transport
+        transport = "http"
 
-    # ---- Run Server ----------------------------------------------
-    # Update environment variables so server.py picks them up during initialization
-    if args.port is not None:
-        os.environ["PORT"] = str(args.port)
-    if args.host is not None:
-        os.environ["MCP_HOST"] = args.host
+    # ---- Resolve HTTP binding -------------------------------------
+    # FastMCP 2.x takes host/port/path via run(), not the constructor.
+    host = args.host or os.environ.get("MCP_HOST", "0.0.0.0")
+    port = args.port if args.port is not None else int(os.environ.get("PORT", "8000"))
 
-    # Lazy import so environment variables take effect
     from src.server import mcp, _register_tools
 
     # ---- Register tools based on mode ----------------------------
@@ -84,13 +87,14 @@ def main() -> None:
 
     logger.info(f"Starting LegacyGraph-MCP  mode={config.MCP_MODE}  transport={transport}")
     if transport == "stdio":
-        mcp.run(transport="stdio")
-    elif transport == "streamable-http":
-        mcp.run(transport="streamable-http", mount_path=args.path)
+        # Banner off: keep stdio sessions clean for desktop MCP clients.
+        mcp.run(transport="stdio", show_banner=False)
+    elif transport == "http":
+        mcp.run(transport="http", host=host, port=port, path=args.path)
     else:
         # SSE fallback (legacy clients)
         os.environ["FORWARDED_ALLOW_IPS"] = "*"
-        mcp.run(transport="sse", mount_path=args.path)
+        mcp.run(transport="sse", host=host, port=port, path=args.path)
 
 
 if __name__ == "__main__":

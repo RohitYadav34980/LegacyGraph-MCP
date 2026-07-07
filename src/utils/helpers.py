@@ -4,7 +4,10 @@ import shutil
 import os
 import concurrent.futures
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
+
+if TYPE_CHECKING:
+    from src.core.graph import DependencyGraph
 
 from src.core.graph import GraphError
 from src.core.parser import CppParser
@@ -59,6 +62,13 @@ def _scan_directory(workspace: Path, cache_path: Optional[str] = None, graph: Op
     # Use the provided graph or fall back to graph_service — always the SAME instance
     if graph is None:
         graph = services.graph_service
+    if graph is None:
+        # graph_service is None in cloud mode; callers there must pass a
+        # pool graph explicitly (analyze_codebase always does).
+        raise GraphError(
+            "No graph available: pass a DependencyGraph explicitly "
+            "(the default graph_service is disabled in cloud mode)."
+        )
 
     # 1. Attempt to load existing cache
     if graph.load_cache(cache_path):

@@ -1,5 +1,4 @@
-import pytest
-import asyncio
+import time
 from datetime import datetime, timedelta
 from src.utils.tasks import TaskRegistry, TaskState
 from src.tools.analysis import analyze_codebase
@@ -31,11 +30,9 @@ def test_task_cleanup():
     registry.cleanup_completed_tasks(max_age_seconds=3600)
     assert registry.get_task(task.id) is None
 
-@pytest.mark.asyncio
-async def test_analyze_as_task():
-    # Mocking analysis to avoid real repo clone
-    # This requires some patching if we want a real E2E
-    # For now, let's just verify the tool returns a taskId
+def test_analyze_as_task():
+    # The background work runs in a daemon thread, so a plain synchronous
+    # poll is sufficient — no event loop involved.
     result = analyze_codebase(raw_files=[{"filename": "test.cpp", "content": "void f(){}"}], as_task=True)
 
     assert "taskId" in result
@@ -43,14 +40,13 @@ async def test_analyze_as_task():
 
     # Poll until the background task reaches a terminal state (with a timeout)
     terminal_states = (TaskState.COMPLETED, TaskState.FAILED, TaskState.CANCELLED)
-    loop = asyncio.get_running_loop()
-    deadline = loop.time() + 10
+    deadline = time.monotonic() + 10
     task = None
-    while loop.time() < deadline:
+    while time.monotonic() < deadline:
         task = services.task_registry.get_task(task_id)
         if task is not None and task.state in terminal_states:
             break
-        await asyncio.sleep(0.1)
+        time.sleep(0.1)
 
     assert task is not None
     assert task.state in terminal_states

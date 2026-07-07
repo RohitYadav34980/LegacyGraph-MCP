@@ -1,12 +1,11 @@
 
 import os
 import sys
-from typing import Optional
 
 # Ensure src is in pythonpath
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from src.tools import analyze_codebase, get_callers, get_callees, detect_cycles, get_orphan_functions
+from src.tools import analyze_codebase, get_callees, detect_cycles, get_orphan_functions
 from src.utils.helpers import _get_raw_files_project_id
 
 def run_verification():
@@ -32,12 +31,6 @@ def run_verification():
     print(f"Total Code Size: {total_bytes} bytes ({len(raw_files)} file(s))")
 
     # --- Ground Truth Definition ---
-    EXPECTED_NODES = {
-        "main", "main_loop", "process_client", 
-        "log_transaction", "calculate_interest", "update_balance", 
-        "db_connect", "hidden_backdoor"
-    }
-    
     EXPECTED_EDGES = [
         ("main", "main_loop"),
         ("main_loop", "process_client"),
@@ -59,10 +52,15 @@ def run_verification():
     print("\n--- Step 1: Analyze Codebase ---")
     result = analyze_codebase(raw_files=raw_files)
     print(result)
-    
+
     if "Error" in result:
         print("FAILED: Analysis step failed.")
         sys.exit(1)
+
+    # Queries are graph-pool aware: without the project_id they would hit the
+    # empty default workspace graph instead of the one we just built.
+    project_id = _get_raw_files_project_id(raw_files)
+    print(f"Using Project ID: {project_id}")
 
     print("\n--- Step 2: Accuracy Verification ---")
     
