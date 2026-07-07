@@ -5,7 +5,6 @@ from pathlib import Path
 import os
 import shutil
 
-from src.core.graph import DependencyGraph, GraphError
 from src.utils.logger import logger
 import src.utils.config as config
 import src.utils.services as services
@@ -104,9 +103,12 @@ def analyze_codebase(
 
     # ---- Workflow 1: Clone a repo ---------------------------------
     if repo_url is not None:
-        # Check Remote Hash First (Optimization)
+        # Check Remote Hash First (Optimization).
+        # Skipped when a patch is supplied: the cached graph reflects the bare
+        # repo (or a previous patch), so "same remote HEAD" does not mean
+        # "same code" — we must re-clone and re-apply.
         current_hash = _get_remote_hash(repo_url)
-        if current_hash and graph.vcs_hash == current_hash:
+        if current_hash and graph.vcs_hash == current_hash and not patch_content:
             return (
                 f"Project '{repo_url}' is up-to-date in cache. "
                 f"Project ID: {target_id}. Ready for queries."
@@ -186,7 +188,8 @@ def analyze_codebase(
         for entry in raw_files:
             filename = entry.get("filename", "")
             content = entry.get("content", "")
-            if not filename or not content: continue
+            if not filename or not content:
+                continue
             try:
                 parsed_data = services.parser_service.parse_source(content)
                 graph.build_from_parsed_data(parsed_data, filepath=filename)
@@ -217,7 +220,8 @@ def analyze_codebase(
         logger.info(f"Local workspace analysis complete for {target_id}. Parsed {files_parsed} files.")
         return (
             f"Analyzed local workspace '{directory_path}'. "
-            f"Project ID: {target_id}. Tracking {node_count} functions."
+            f"Project ID: {target_id}. "
+            f"Parsed {files_parsed} file(s), tracking {node_count} functions."
         )
 
     return "Error: No valid input pathway matched."

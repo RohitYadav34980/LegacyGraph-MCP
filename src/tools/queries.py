@@ -127,7 +127,7 @@ def detect_cycles(project_id: Optional[str] = None) -> str:
             return "No circular dependencies detected."
 
         cycle_strs = [" -> ".join(cycle + [cycle[0]]) for cycle in cycles]
-        return f"Circular dependencies detected:\n- " + "\n- ".join(cycle_strs)
+        return "Circular dependencies detected:\n- " + "\n- ".join(cycle_strs)
     except Exception as e:
         return f"Error detecting cycles: {str(e)}"
 

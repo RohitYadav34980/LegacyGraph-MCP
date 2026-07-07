@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.0] — 2026-07-07
+
+### Changed — MCP 2.0 Upgrade
+- **Migrated from the legacy `mcp.server.fastmcp` (FastMCP 1.0 bundled in the
+  official SDK) to standalone FastMCP 2.x** (`fastmcp >=2.14,<3`), bringing
+  current MCP spec support (structured output, elicitation, auth, middleware)
+- `src/server.py` — transport settings (host/port/path) moved out of the
+  `FastMCP()` constructor into `mcp.run()` per the FastMCP 2.x API; server
+  now advertises `version="2.0.0"` and `website_url` metadata
+- `src/__main__.py` — canonical HTTP transport renamed to `http`
+  (`streamable-http` still accepted as an alias); stdio runs banner-free
+- Server card (`/.well-known/mcp/server-card.json`) now derives its tool list
+  from the live FastMCP registry instead of a hand-maintained copy
+- `pyproject.toml` — dropped direct `mcp` pin (provided by fastmcp) and the
+  unused `gitpython` dependency
+
+### Added
+- **CI pipeline** (`.github/workflows/ci.yml`) — ruff, strict mypy (`src/`),
+  pytest on Python 3.11/3.12/3.13, and the end-to-end verifier on every
+  push and pull request
+- `poetry.lock` regenerated for the FastMCP 2.x stack (the stale lock would
+  have kept building Docker images against `mcp 1.x`)
+
+### Fixed
+- **Codebase now passes `ruff check` and strict `mypy` cleanly** — fixed
+  undefined forward references, untyped overrides, and `Optional` leaks;
+  `_scan_directory` now raises a clear error instead of crashing when no
+  graph is available in cloud mode
+- **Logging no longer writes to stdout** — in stdio transport, stdout carries
+  the JSON-RPC stream; log lines there corrupt the protocol. All logs go to
+  stderr now
+- **`tools/verifier.py` and three tests were broken since the GraphPool
+  refactor** — they queried without `project_id`, hitting an empty default
+  graph. Verifier reports 100% accuracy again
+- **Patch-aware cache check** — `analyze_codebase(repo_url=..., patch_content=...)`
+  no longer short-circuits on an unchanged remote HEAD, so a new patch is
+  always applied
+- `analyze_codebase(directory_path=...)` result message now includes the
+  parsed file count
+- Removed `logging.basicConfig()` side effect from `src/core/parser.py`
+
+---
+
 ## [0.3.0] — 2026-03-21
 
 ### Added

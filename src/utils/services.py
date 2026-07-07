@@ -109,6 +109,6 @@ def reset_graph_service(graph: Optional[DependencyGraph] = None) -> DependencyGr
 
 
 # Legacy alias helper to minimize massive refactoring in tools
-def get_graph_service() -> DependencyGraph:
-    """Legacy helper to get the 'default' graph. Avoid in new code."""
+def get_graph_service() -> Optional[DependencyGraph]:
+    """Legacy helper to get the 'default' graph (None in cloud mode). Avoid in new code."""
     return graph_service

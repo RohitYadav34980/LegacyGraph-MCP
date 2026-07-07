@@ -1,15 +1,16 @@
 import logging
 from typing import List, Set, Tuple, Optional
+
 try:
-    import tree_sitter_cpp as ts_cpp  # type: ignore
-    from tree_sitter import Language, Parser, Node  # type: ignore
+    import tree_sitter_cpp as ts_cpp
+    from tree_sitter import Language, Parser, Node
 except ImportError:
-    ts_cpp = None
-    Language = Parser = Node = None
+    ts_cpp = None  # type: ignore[assignment]
+    Language = Parser = Node = None  # type: ignore[assignment,misc]
     logging.warning("Failed to import tree-sitter dependencies. Parser will not work.")
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Module logger only — never call logging.basicConfig() in a library module:
+# it hijacks the root logger for every consumer of this package.
 logger = logging.getLogger(__name__)
 
 
@@ -28,7 +29,7 @@ class CppParser:
 
     def __init__(self) -> None:
         """Initialize the CppParser with tree-sitter-cpp."""
-        if not ts_cpp or not Language:
+        if ts_cpp is None or Language is None:
             raise ParseError("tree-sitter or tree-sitter-cpp not cached/installed correctly.")
 
         try:
@@ -88,6 +89,11 @@ class CppParser:
             logger.error(f"Error parsing source code: {e}")
             raise ParseError(f"Parsing failed: {e}")
 
+    @staticmethod
+    def _node_text(node: Node) -> str:
+        """Decodes a node's source text (tree-sitter types it as Optional)."""
+        return (node.text or b"").decode("utf8")
+
     def _extract_function_name(self, func_def_node: Node) -> Optional[str]:
         """
         Extracts the function name from a function_definition node.
@@ -95,11 +101,11 @@ class CppParser:
         declarator = func_def_node.child_by_field_name("declarator")
         if not declarator:
             return None
-        
-        curr = declarator
+
+        curr: Optional[Node] = declarator
         while curr:
             if curr.type == "identifier":
-                return curr.text.decode("utf8")
+                return self._node_text(curr)
             elif curr.type == "function_declarator":
                 curr = curr.child_by_field_name("declarator")
             elif curr.type == "parenthesized_declarator":
@@ -107,14 +113,14 @@ class CppParser:
             elif curr.type == "pointer_declarator" or curr.type == "reference_declarator":
                  curr = curr.child_by_field_name("declarator")
             elif curr.type == "field_identifier":
-                 return curr.text.decode("utf8")
+                 return self._node_text(curr)
             else:
-                break 
-        
+                break
+
         if declarator.type == "function_declarator":
              inner_decl = declarator.child_by_field_name("declarator")
              if inner_decl and inner_decl.type == "qualified_identifier":
-                 return inner_decl.text.decode("utf8")
+                 return self._node_text(inner_decl)
 
         return None
 
@@ -131,13 +137,11 @@ class CppParser:
                 for node in nodes:
                      func_node = node.child_by_field_name("function")
                      if func_node:
-                        call_name = func_node.text.decode("utf8")
-                        calls.add(call_name)
+                        calls.add(self._node_text(func_node))
         else:
             for node, _ in captures:
                  func_node = node.child_by_field_name("function")
                  if func_node:
-                    call_name = func_node.text.decode("utf8")
-                    calls.add(call_name)
+                    calls.add(self._node_text(func_node))
 
         return calls

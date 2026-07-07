@@ -314,8 +314,7 @@ def test_analyze_codebase_directory_path_local():
         result = analyze_codebase(directory_path=tmpdir)
 
         assert "error" not in result.lower()
-        # "1" appears in "Analyzed local workspace..." or node count
-        assert "1" in result
+        assert "Parsed 1 file(s)" in result
 
         # Compute deterministic target_id to look up the pool graph
         target_id = hashlib.sha256(tmpdir.encode()).hexdigest()[:8]
@@ -365,12 +364,14 @@ def test_generate_mermaid_graph():
     """generate_mermaid_graph should return a Mermaid string, not write a file."""
     from src.tools.export import generate_mermaid_graph
     from src.tools.analysis import analyze_codebase
+    from src.utils.helpers import _get_raw_files_project_id
 
-    # Populate graph
+    # Populate graph — analyze_codebase stores it under the content-based
+    # project_id, so queries must pass the same id to hit that graph.
     raw = [{"filename": "a.cpp", "content": "void alpha() { beta(); }\nvoid beta() {}"}]
     analyze_codebase(raw_files=raw)
 
-    result = generate_mermaid_graph()
+    result = generate_mermaid_graph(project_id=_get_raw_files_project_id(raw))
 
     assert "mermaid" in result
     assert "graph TD" in result
@@ -383,13 +384,16 @@ def test_generate_mermaid_graph_with_focus():
     """generate_mermaid_graph with focus_node should limit output."""
     from src.tools.export import generate_mermaid_graph
     from src.tools.analysis import analyze_codebase
+    from src.utils.helpers import _get_raw_files_project_id
 
     raw = [
         {"filename": "a.cpp", "content": "void a() { b(); }\nvoid b() { c(); }\nvoid c() {}"},
     ]
     analyze_codebase(raw_files=raw)
 
-    result = generate_mermaid_graph(focus_node="a", max_depth=1)
+    result = generate_mermaid_graph(
+        focus_node="a", max_depth=1, project_id=_get_raw_files_project_id(raw)
+    )
 
     assert "mermaid" in result
     assert "a" in result

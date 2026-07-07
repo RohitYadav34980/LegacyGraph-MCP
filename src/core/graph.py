@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-import networkx as nx  # type: ignore
+import networkx as nx
 
 logger = logging.getLogger(__name__)
 
@@ -133,7 +133,7 @@ class DependencyGraph:
         """
         try:
             cycles = list(nx.simple_cycles(self.graph))
-            return cycles  # type: ignore
+            return cycles
         except Exception as e:
             logger.error(f"Error detecting cycles: {e}")
             raise GraphError(f"Cycle detection failed: {e}")
