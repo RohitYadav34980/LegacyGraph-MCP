@@ -45,6 +45,9 @@ def run_verification():
     ]
     
     EXPECTED_ORPHANS = {"hidden_backdoor"} # technically 'main' is often an entry point, not orphan.
+
+    # Compute the project_id that analyze_codebase will assign to these raw files
+    project_id = _get_raw_files_project_id(raw_files)
     
     print("\n--- Step 1: Analyze Codebase ---")
     result = analyze_codebase(raw_files=raw_files)

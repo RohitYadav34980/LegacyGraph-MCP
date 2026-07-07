@@ -1,6 +1,6 @@
 """Codebase ingestion tool: clone repos, parse raw files, scan directories."""
 
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from pathlib import Path
 import os
 import shutil
@@ -8,6 +8,7 @@ import shutil
 from src.utils.logger import logger
 import src.utils.config as config
 import src.utils.services as services
+from src.utils.tasks import TaskState
 from src.utils.helpers import (
     _scan_directory, 
     _clone_repo, 
@@ -24,7 +25,8 @@ def analyze_codebase(
     patch_content: Optional[str] = None,
     raw_files: Optional[List[Dict[str, str]]] = None,
     directory_path: Optional[str] = None,
-) -> str:
+    as_task: bool = False,
+) -> Any:
     """
     Ingest a C++ codebase and build its dependency graph.
     This tool does NOT accept 'code_content'. Provide exactly ONE of:
@@ -101,7 +103,49 @@ def analyze_codebase(
     
     logger.info(f"Codebase analysis initiated. Target mapped to Project ID: {target_id}")
 
-    # ---- Workflow 1: Clone a repo ---------------------------------
+    if as_task:
+        task = services.task_registry.create_task(metadata={"project_id": target_id, "type": "analysis"})
+
+        def run_analysis() -> None:
+            try:
+                task.update(state=TaskState.RUNNING, status_text="Starting analysis...")
+                graph_lock = services.graph_pool.get_graph_lock(target_id)
+                with graph_lock:
+                    result = _do_analysis(repo_url, patch_content, raw_files, directory_path, target_id, cache_path, graph, task)
+                if isinstance(result, str) and result.startswith("Error"):
+                    task.update(state=TaskState.FAILED, status_text=result)
+                    task.error = result
+                else:
+                    task.update(state=TaskState.COMPLETED, progress=100, status_text="Analysis complete.")
+                    task.result = result
+            except Exception as e:
+                logger.error(f"Task {task.id} failed: {e}")
+                task.update(state=TaskState.FAILED, status_text=f"Error: {str(e)}")
+                task.error = str(e)
+
+        import threading
+        threading.Thread(target=run_analysis, daemon=True).start()
+        
+        return {
+            "taskId": task.id,
+            "status": "running",
+            "message": f"Analysis task {task.id} started for project {target_id}."
+        }
+
+    return _do_analysis(repo_url, patch_content, raw_files, directory_path, target_id, cache_path, graph)
+
+
+def _do_analysis(
+    repo_url: Optional[str],
+    patch_content: Optional[str],
+    raw_files: Optional[List[Dict[str, str]]],
+    directory_path: Optional[str],
+    target_id: str,
+    cache_path: Optional[str],
+    graph: Any,
+    task: Optional[Any] = None
+) -> str:
+    """Internal implementation of codebase analysis logic."""
     if repo_url is not None:
         # Check Remote Hash First (Optimization).
         # Skipped when a patch is supplied: the cached graph reflects the bare
@@ -139,7 +183,7 @@ def analyze_codebase(
                 _apply_patch(clone_dir, patch_content)
 
             files_parsed, files_skipped, node_count = _scan_directory(
-                clone_dir, cache_path=cache_path, graph=graph
+                clone_dir, cache_path=cache_path, graph=graph, task=task
             )
             
             if current_hash:
@@ -215,7 +259,7 @@ def analyze_codebase(
         if not workspace.is_dir():
             return f"Error: '{directory_path}' is not a directory."
         files_parsed, files_skipped, node_count = _scan_directory(
-            workspace, cache_path=cache_path, graph=graph
+            workspace, cache_path=cache_path, graph=graph, task=task
         )
         logger.info(f"Local workspace analysis complete for {target_id}. Parsed {files_parsed} files.")
         return (

@@ -254,5 +254,5 @@ Built with:
 
 <div align="center">
   <p>Thanks for visiting!</p>
-  <img src="https://visitor-badge.laobi.icu/badge?page_id=RohitYadav34980.LegacyGraph-MCP&" alt="visitors" />
+  <img src="https://visitor-badge.laobi.icu/badge?page_id=rohit-yadav34.LegacyGraph-MCP&" alt="visitors" />
 </div>

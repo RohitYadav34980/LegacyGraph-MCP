@@ -5,6 +5,7 @@ import threading
 
 from src.core.graph import DependencyGraph
 from src.core.parser import CppParser
+from src.utils.tasks import TaskRegistry
 import src.utils.config as config
 
 class GraphPool:
@@ -85,6 +86,7 @@ class GraphPool:
 # Global State
 graph_pool = GraphPool()
 parser_service = CppParser()
+task_registry = TaskRegistry()
 
 # Backward-compat shim: graph_service → default pool graph (local mode only).
 # In cloud mode, project_id is required per-request, so we leave this as None.

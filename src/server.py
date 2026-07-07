@@ -16,6 +16,8 @@ if TYPE_CHECKING:
 
 from src.utils.logger import logger
 import src.utils.config as config
+import src.utils.services as services
+from src.utils.tasks import TaskState
 from src.tools import (
     analyze_codebase,
     get_file_functions,
@@ -99,6 +101,48 @@ def _register_tools(mode: str, server: Optional["FastMCP"] = None) -> "FastMCP":
     target.tool()(detect_cycles)
     target.tool()(get_orphan_functions)
     target.tool()(generate_mermaid_graph)
+
+    # Task Management (SEP-1686)
+    @target.tool()
+    def get_task_status(task_id: str) -> dict[str, Any]:
+        """Check the status of a long-running task."""
+        task = services.task_registry.get_task(task_id)
+        if not task:
+            return {"error": f"Task {task_id} not found."}
+
+        return {
+            "taskId": task.id,
+            "state": task.state.value,
+            "progress": task.progress,
+            "status_text": task.status_text,
+            "updated_at": task.updated_at.isoformat(),
+        }
+
+    @target.tool()
+    def get_task_result(task_id: str) -> dict[str, Any]:
+        """Retrieve the result of a completed task."""
+        task = services.task_registry.get_task(task_id)
+        if not task:
+            return {"error": f"Task {task_id} not found."}
+
+        if task.state == TaskState.COMPLETED:
+            return {
+                "taskId": task.id,
+                "result": task.result,
+            }
+
+        if task.state in (TaskState.FAILED, TaskState.CANCELLED):
+            return {
+                "taskId": task.id,
+                "state": task.state.value,
+                "error": task.error or task.status_text,
+            }
+
+        return {
+            "taskId": task.id,
+            "state": task.state.value,
+            "message": "Task not yet completed.",
+        }
 
     # Local-only tools
     if mode == "local":

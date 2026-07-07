@@ -1,18 +1,28 @@
 import logging
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timezone, timedelta, tzinfo
 from typing import Optional
-from zoneinfo import ZoneInfo
+
+# ZoneInfo requires 'tzdata' on Windows; fall back to fixed offsets if unavailable
+_TZ_UTC: tzinfo
+_TZ_IST: tzinfo
+try:
+    from zoneinfo import ZoneInfo
+    _TZ_UTC = ZoneInfo("UTC")
+    _TZ_IST = ZoneInfo("Asia/Kolkata")
+except (ImportError, KeyError):
+    _TZ_UTC = timezone.utc
+    _TZ_IST = timezone(timedelta(hours=5, minutes=30))
 
 class ISTFormatter(logging.Formatter):
     """Custom Formatter to enforce Indian Standard Time (IST) in logs."""
     def converter(self, timestamp: Optional[float]) -> time.struct_time:
-        dt = datetime.fromtimestamp(timestamp or 0.0, tz=ZoneInfo("UTC"))
-        return dt.astimezone(ZoneInfo("Asia/Kolkata")).timetuple()
+        dt = datetime.fromtimestamp(timestamp or 0.0, tz=_TZ_UTC)
+        return dt.astimezone(_TZ_IST).timetuple()
 
     def formatTime(self, record: logging.LogRecord, datefmt: Optional[str] = None) -> str:
-        dt = datetime.fromtimestamp(record.created, tz=ZoneInfo("UTC")).astimezone(ZoneInfo("Asia/Kolkata"))
+        dt = datetime.fromtimestamp(record.created, tz=_TZ_UTC).astimezone(_TZ_IST)
         if datefmt:
             return dt.strftime(datefmt)
         return dt.strftime('%Y-%m-%d %H:%M:%S')
